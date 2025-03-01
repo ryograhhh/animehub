@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Senpai Anime - Your Anime Collection</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        // Function to load anime data from localStorage
+        function loadAnimeData() {
+            const animeContainer = document.getElementById('animeContainer');
+            const trendingContainer = document.getElementById('trendingContainer');
+            const continueWatchingContainer = document.getElementById('continueWatchingContainer');
+            
+            // Clear containers
+            animeContainer.innerHTML = '';
+            trendingContainer.innerHTML = '';
+            if (continueWatchingContainer) continueWatchingContainer.innerHTML = '';
+            
+            // Get anime data from localStorage
+            const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            
+            if (animeData.length === 0) {
+                // If no anime data, show placeholder message
+                animeContainer.innerHTML = `
+                    <div class="col-span-full p-8 text-center bg-gray-800/60 backdrop-blur-sm rounded-xl">
+                        <h3 class="text-xl font-bold text-white">No anime uploaded yet</h3>
+                        <p class="text-gray-300 mt-2">Visit the admin panel to upload your first anime!</p>
+                        <a href="admin.html" class="inline-block mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-300">Go to Admin Panel</a>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort by date (newest first)
+            const sortedAnime = [...animeData].sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+            
+            // Display newest uploads (first 10)
+            const newestAnime = sortedAnime.slice(0, 10);
+            newestAnime.forEach(anime => {
+                animeContainer.innerHTML += createAnimeCard(anime);
+            });
+            
+            // Sort by views (most viewed first) for trending
+            const trendingAnime = [...animeData].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 5);
+            trendingAnime.forEach((anime, index) => {
+                trendingContainer.innerHTML += createAnimeCard(anime, `Trending #${index+1}`);
+            });
+            
+            // Get watched anime for continue watching section
+            const watchHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+            if (watchHistory.length > 0 && continueWatchingContainer) {
+                // Get the most recently watched animes (max 5)
+                const recentlyWatched = watchHistory
+                    .sort((a, b) => new Date(b.lastWatched) - new Date(a.lastWatched))
+                    .slice(0, 5);
+                
+                // Find the anime data for each history item
+                recentlyWatched.forEach(history => {
+                    const anime = animeData.find(a => a.id === history.animeId);
+                    if (anime) {
+                        const progress = history.progress || 0;
+                        continueWatchingContainer.innerHTML += createAnimeCard(
+                            anime, 
+                            `Ep ${history.episode || anime.currentEpisode}`, 
+                            progress
+                        );
+                    }
+                });
+                
+                // If no recently watched, hide the section
+                if (recentlyWatched.length === 0) {
+                    document.getElementById('continueWatchingSection').classList.add('hidden');
+                }
+            } else if (continueWatchingContainer) {
+                document.getElementById('continueWatchingSection').classList.add('hidden');
+            }
+
+            // Initialize feather icons in newly added content
+            feather.replace();
+        }
+        
+        // Function to create anime card HTML
+        function createAnimeCard(anime, badgeText = 'New', progress = null) {
+            return `
+                <div class="group flex flex-col overflow-hidden bg-gray-800/60 backdrop-blur-sm rounded-xl shadow-lg transition duration-300 hover:transform hover:scale-105 hover:shadow-xl border border-gray-700/50">
+                    <div class="relative h-64">
+                        <img src="${anime.thumbnail || 'https://placehold.co/300x400/1f2937/FFFFFF?text=Anime'}" 
+                             alt="${anime.title}" 
+                             class="w-full h-full object-cover rounded-t-xl">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                        <span class="absolute left-3 top-3 px-2 py-1 text-xs font-medium bg-red-600 text-white rounded-md">
+                            ${badgeText}
+                        </span>
+                        <div class="absolute bottom-0 left-0 right-0 px-4 py-3">
+                            <span class="text-white text-sm flex items-center gap-2">
+                                <i data-feather="play-circle" class="w-4 h-4"></i> Episode ${anime.currentEpisode || '1'}
+                            </span>
+                            ${progress !== null ? `
+                                <div class="w-full h-1 bg-gray-600 rounded-full mt-2 overflow-hidden">
+                                    <div class="h-full bg-red-500 rounded-full" style="width: ${progress}%"></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <a href="watch.html?id=${anime.id}&ep=${anime.currentEpisode || '1'}" 
+                           class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/60 transition-opacity duration-300">
+                            <div class="bg-red-600 rounded-full w-16 h-16 flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
+                                <i data-feather="play" class="w-8 h-8"></i>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="p-4 flex-1 flex flex-col">
+                        <h3 class="text-lg font-bold text-white truncate group-hover:text-red-400 transition-colors duration-300" title="${anime.title}">
+                            ${anime.title}
+                        </h3>
+                        <div class="mt-1 text-sm text-gray-400 flex items-center space-x-2">
+                            <span>${anime.genre || 'Action'}</span>
+                            <span>•</span>
+                            <span>${anime.language || 'Subtitled'}</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-auto pt-3">
+                            <a href="watch.html?id=${anime.id}&ep=${anime.currentEpisode || '1'}" 
+                               class="text-red-400 hover:text-red-300 text-sm font-medium flex items-center gap-1 transition-colors duration-300">
+                                <span>Watch Now</span>
+                                <i data-feather="arrow-right" class="w-4 h-4"></i>
+                            </a>
+                            <span class="text-xs text-gray-500">${anime.totalEpisodes || anime.currentEpisode || 1} Episodes</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Handle theme toggle
+        function toggleDarkMode() {
+            const isDarkMode = localStorage.getItem('darkMode') === 'true';
+            localStorage.setItem('darkMode', (!isDarkMode).toString());
+            applyTheme();
+        }
+        
+        // Apply theme based on localStorage
+        function applyTheme() {
+            const isDarkMode = localStorage.getItem('darkMode') === 'true';
+            const themeToggleIcon = document.getElementById('themeToggleIcon');
+            
+            if (isDarkMode) {
+                document.documentElement.classList.add('dark-theme');
+                if (themeToggleIcon) {
+                    themeToggleIcon.innerHTML = '';
+                    themeToggleIcon.appendChild(feather.icons['sun'].toSvg());
+                }
+            } else {
+                document.documentElement.classList.remove('dark-theme');
+                if (themeToggleIcon) {
+                    themeToggleIcon.innerHTML = '';
+                    themeToggleIcon.appendChild(feather.icons['moon'].toSvg());
+                }
+            }
+        }
+        
+        // Handle search
+        function handleSearch() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            const resultsContainer = document.getElementById('searchResults');
+            
+            // Clear previous results
+            resultsContainer.innerHTML = '';
+            
+            if (searchInput.length < 2) {
+                resultsContainer.classList.add('hidden');
+                return;
+            }
+            
+            // Filter anime by search term
+            const filteredAnime = animeData.filter(anime => 
+                anime.title.toLowerCase().includes(searchInput) || 
+                (anime.description && anime.description.toLowerCase().includes(searchInput)) ||
+                (anime.genre && anime.genre.toLowerCase().includes(searchInput))
+            );
+            
+            if (filteredAnime.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="p-4 text-center">
+                        <p class="text-gray-400">No results found for "${searchInput}"</p>
+                    </div>
+                `;
+            } else {
+                filteredAnime.slice(0, 5).forEach(anime => {
+                    resultsContainer.innerHTML += `
+                        <a href="watch.html?id=${anime.id}&ep=1" 
+                           class="flex items-center gap-3 p-3 hover:bg-gray-700 transition duration-200">
+                            <img src="${anime.thumbnail || 'https://placehold.co/300x400/1f2937/FFFFFF?text=Anime'}" 
+                                 alt="${anime.title}" class="w-12 h-16 object-cover rounded">
+                            <div>
+                                <h4 class="font-medium text-white">${anime.title}</h4>
+                                <p class="text-sm text-gray-400">${anime.genre || 'Unknown genre'}</p>
+                            </div>
+                        </a>
+                    `;
+                });
+                
+                if (filteredAnime.length > 5) {
+                    resultsContainer.innerHTML += `
+                        <div class="p-3 text-center border-t border-gray-700">
+                            <a href="#" class="text-red-400 text-sm hover:text-red-300">
+                                View all ${filteredAnime.length} results
+                            </a>
+                        </div>
+                    `;
+                }
+            }
+            
+            resultsContainer.classList.remove('hidden');
+        }
+        
+        // Hide search results when clicking outside
+        document.addEventListener('click', function(event) {
+            const searchContainer = document.getElementById('searchContainer');
+            const searchResults = document.getElementById('searchResults');
+            
+            if (searchContainer && searchResults && !searchContainer.contains(event.target)) {
+                searchResults.classList.add('hidden');
+            }
+        });
+        
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            // Replace all feather icons
+            feather.replace();
+            
+            // Load anime data
+            loadAnimeData();
+            
+            // Apply theme settings
+            applyTheme();
+            
+            // Set up search handler
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', handleSearch);
+                searchInput.addEventListener('focus', handleSearch);
+            }
+        });
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        
+        .dark-theme {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+        }
+        
+        .dark-theme body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        .dark-theme .bg-gray-800 {
+            background-color: var(--bg-secondary);
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(31, 41, 55, 0.5);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(239, 68, 68, 0.6);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(239, 68, 68, 0.8);
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        /* Red gradient for heading */
+        .red-gradient {
+            background: linear-gradient(90deg, #ff4b4b 0%, #ff0000 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+        }
+        
+        /* Glassmorphism effect */
+        .glassmorphism {
+            background: rgba(17, 24, 39, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 77, 77, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 glassmorphism shadow-xl">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-r from-red-600 to-red-500 flex items-center justify-center text-xl font-bold">S</div>
+                    <div class="ml-3">
+                        <h1 class="text-xl font-bold red-gradient">
+                            Senpai Anime
+                        </h1>
+                        <p class="text-xs text-red-400">Your Personal Collection</p>
+                    </div>
+                </div>
+                
+                <nav class="md:ml-8">
+                    <ul class="flex space-x-6">
+                        <li><a href="#" class="hover:text-red-400 transition duration-300 flex items-center gap-1"><i data-feather="home" class="w-4 h-4"></i> Home</a></li>
+                        <li><a href="#latest" class="hover:text-red-400 transition duration-300 flex items-center gap-1"><i data-feather="clock" class="w-4 h-4"></i> Latest</a></li>
+                        <li><a href="#trending" class="hover:text-red-400 transition duration-300 flex items-center gap-1"><i data-feather="trending-up" class="w-4 h-4"></i> Trending</a></li>
+                        <li><a href="#categories" class="hover:text-red-400 transition duration-300 flex items-center gap-1"><i data-feather="grid" class="w-4 h-4"></i> Categories</a></li>
+                        <li><a href="admin.html" class="text-red-400 hover:text-red-300 transition duration-300 flex items-center gap-1"><i data-feather="settings" class="w-4 h-4"></i> Admin</a></li>
+                    </ul>
+                </nav>
+                
+                <div class="flex items-center gap-4">
+                    <div id="searchContainer" class="relative mt-1 md:mt-0 w-full md:w-auto md:flex-1 max-w-md">
+                        <div class="relative">
+                            <input type="text" 
+                                id="searchInput"
+                                placeholder="Search anime..." 
+                                class="w-full px-4 py-2 pl-10 bg-gray-800/30 border border-gray-700/50 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                            <i data-feather="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+                        </div>
+                        <div id="searchResults" class="absolute mt-2 w-full rounded-xl overflow-hidden glassmorphism shadow-xl z-50 hidden animate-fadeIn">
+                            <!-- Search results will appear here -->
+                        </div>
+                    </div>
+                    
+                    <button onclick="toggleDarkMode()" class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800/30 border border-gray-700/50 hover:bg-gray-700 transition duration-300">
+                        <div id="themeToggleIcon" class="w-5 h-5 text-gray-300"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="relative py-24 overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-br from-red-900/40 to-gray-900/80"></div>
+        <div class="absolute inset-0 overflow-hidden opacity-20">
+            <div class="absolute inset-0 bg-[url('https://placehold.co/1200x450/1f2937/FFFFFF?text=Anime+Banner')] bg-center bg-cover"></div>
+        </div>
+        <div class="container mx-auto px-4 relative">
+            <div class="max-w-3xl mx-auto text-center">
+                <h2 class="text-4xl md:text-5xl font-bold mb-4 red-gradient">Your Ultimate Anime Collection</h2>
+                <p class="text-lg md:text-xl text-gray-300 mb-8">Build and manage your own personal anime library with dubbing and subtitles.</p>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <a href="admin.html" class="inline-flex items-center gap-2 px-8 py-3 bg-red-600 hover:bg-red-700 rounded-full text-white font-medium transition duration-300 transform hover:scale-105 shadow-lg shadow-red-600/30">
+                        <i data-feather="plus-circle" class="w-5 h-5"></i>
+                        <span>Upload Anime</span>
+                    </a>
+                    <a href="#latest" class="inline-flex items-center gap-2 px-8 py-3 bg-gray-800/70 hover:bg-gray-700 rounded-full text-white font-medium border border-gray-600 transition duration-300">
+                        <i data-feather="arrow-down" class="w-5 h-5"></i>
+                        <span>Explore Collection</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Animated wave separator -->
+        <div class="absolute bottom-0 left-0 right-0 h-16 overflow-hidden">
+            <svg class="w-full h-full" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+                <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z" 
+                      fill="#111827" opacity="0.8"></path>
+            </svg>
+        </div>
+    </section>
+    
+    <!-- Continue Watching Section (if applicable) -->
+    <section id="continueWatchingSection" class="py-16 container mx-auto px-4">
+        <h2 class="text-2xl md:text-3xl font-bold mb-8 relative pb-4 text-red-500 flex items-center gap-3">
+            <i data-feather="play-circle" class="w-6 h-6"></i> Continue Watching
+            <span class="absolute bottom-0 left-0 w-16 h-1 bg-red-600"></span>
+        </h2>
+        
+        <div id="continueWatchingContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+            <!-- Continue watching items will be loaded here via JavaScript -->
+        </div>
+    </section>
+
+    <!-- Latest Uploads Section -->
+    <section id="latest" class="py-16 container mx-auto px-4">
+        <h2 class="text-2xl md:text-3xl font-bold mb-8 relative pb-4 text-red-500 flex items-center gap-3">
+            <i data-feather="clock" class="w-6 h-6"></i> Latest Uploads
+            <span class="absolute bottom-0 left-0 w-16 h-1 bg-red-600"></span>
+        </h2>
+        
+        <div id="animeContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+            <!-- Anime cards will be loaded here via JavaScript -->
+            <div class="col-span-full p-8 text-center glassmorphism rounded-xl">
+                <div class="flex justify-center mb-4">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+                </div>
+                <h3 class="text-xl font-bold text-white">Loading anime...</h3>
+                <p class="text-gray-300 mt-2">Please wait while we fetch your collection</p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Trending Section -->
+    <section id="trending" class="py-16 relative">
+        <div class="absolute inset-0 bg-gradient-to-r from-red-900/20 to-gray-900/20"></div>
+        <div class="container mx-auto px-4 relative">
+            <h2 class="text-2xl md:text-3xl font-bold mb-8 relative pb-4 text-red-500 flex items-center gap-3">
+                <i data-feather="trending-up" class="w-6 h-6"></i> Trending Now
+                <span class="absolute bottom-0 left-0 w-16 h-1 bg-red-600"></span>
+            </h2>
+            
+            <div id="trendingContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                <!-- Trending anime cards will be loaded here via JavaScript -->
+            </div>
+        </div>
+    </section>
+    
+    <!-- Categories Section -->
+    <section id="categories" class="py-16 container mx-auto px-4">
+        <h2 class="text-2xl md:text-3xl font-bold mb-8 relative pb-4 text-red-500 flex items-center gap-3">
+            <i data-feather="grid" class="w-6 h-6"></i> Categories
+            <span class="absolute bottom-0 left-0 w-16 h-1 bg-red-600"></span>
+        </h2>
+        
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-10">
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="zap" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Action</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="compass" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Adventure</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="smile" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Comedy</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="coffee" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Drama</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="star" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Fantasy</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="skull" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Horror</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="globe" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Isekai</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="help-circle" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Mystery</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="heart" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Romance</span>
+            </a>
+            <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
+                <i data-feather="cpu" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
+                <span>Sci-Fi</span>
+            </a>
+        </div>
+    </section>
+
+    <!-- Popular Anime Section -->
+    <section id="popular" class="py-16 container mx-auto px-4">
+        <h2 class="text-2xl md:text-3xl font-bold mb-8 relative pb-4 text-red-500 flex items-center gap-3">
+            <i data-feather="award" class="w-6 h-6"></i> Popular Anime
+            <span class="absolute bottom-0 left-0 w-16 h-1 bg-red-600"></span>
+        </h2>
+
+        <div class="flex overflow-x-auto pb-4 space-x-4 hide-scrollbar">
+            <div class="flex-shrink-0 w-60 bg-gray-800/60 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-700/50">
+                <div class="relative h-80">
+                    <img src="https://placehold.co/300x400/1f2937/FFFFFF?text=Hunter+x+Hunter" alt="Hunter x Hunter" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div class="absolute bottom-0 left-0 right-0 p-4">
+                        <h3 class="text-lg font-bold text-white">Hunter x Hunter</h3>
+                        <div class="flex items-center mt-1">
+                            <div class="flex items-center">
+                                <i data-feather="star" class="w-4 h-4 text-yellow-500"></i>
+                                <span class="ml-1 text-sm text-white">9.5</span>
+                            </div>
+                            <span class="mx-2 text-gray-400">•</span>
+                            <span class="text-sm text-gray-300">Action, Adventure</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-shrink-0 w-60 bg-gray-800/60 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-700/50">
+                <div class="relative h-80">
+                    <img src="https://placehold.co/300x400/1f2937/FFFFFF?text=Naruto" alt="Naruto" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div class="absolute bottom-0 left-0 right-0 p-4">
+                        <h3 class="text-lg font-bold text-white">Naruto: Shippuden</h3>
+                        <div class="flex items-center mt-1">
+                            <div class="flex items-center">
+                                <i data-feather="star" class="w-4 h-4 text-yellow-500"></i>
+                                <span class="ml-1 text-sm text-white">9.2</span>
+                            </div>
+                            <span class="mx-2 text-gray-400">•</span>
+                            <span class="text-sm text-gray-300">Action, Adventure</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-shrink-0 w-60 bg-gray-800/60 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-700/50">
+                <div class="relative h-80">
+                    <img src="https://placehold.co/300x400/1f2937/FFFFFF?text=One+Piece" alt="One Piece" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div class="absolute bottom-0 left-0 right-0 p-4">
+                        <h3 class="text-lg font-bold text-white">One Piece</h3>
+                        <div class="flex items-center mt-1">
+                            <div class="flex items-center">
+                                <i data-feather="star" class="w-4 h-4 text-yellow-500"></i>
+                                <span class="ml-1 text-sm text-white">8.8</span>
+                            </div>
+                            <span class="mx-2 text-gray-400">•</span>
+                            <span class="text-sm text-gray-300">Adventure, Fantasy</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-shrink-0 w-60 bg-gray-800/60 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-700/50">
+                <div class="relative h-80">
+                    <img src="https://placehold.co/300x400/1f2937/FFFFFF?text=Demon+Slayer" alt="Demon Slayer" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div class="absolute bottom-0 left-0 right-0 p-4">
+                        <h3 class="text-lg font-bold text-white">Demon Slayer</h3>
+                        <div class="flex items-center mt-1">
+                            <div class="flex items-center">
+                                <i data-feather="star" class="w-4 h-4 text-yellow-500"></i>
+                                <span class="ml-1 text-sm text-white">9.3</span>
+                            </div>
+                            <span class="mx-2 text-gray-400">•</span>
+                            <span class="text-sm text-gray-300">Action, Supernatural</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-shrink-0 w-60 bg-gray-800/60 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-700/50">
+                <div class="relative h-80">
+                    <img src="https://placehold.co/300x400/1f2937/FFFFFF?text=Attack+on+Titan" alt="Attack on Titan" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div class="absolute bottom-0 left-0 right-0 p-4">
+                        <h3 class="text-lg font-bold text-white">Attack on Titan</h3>
+                        <div class="flex items-center mt-1">
+                            <div class="flex items-center">
+                                <i data-feather="star" class="w-4 h-4 text-yellow-500"></i>
+                                <span class="ml-1 text-sm text-white">9.1</span>
+                            </div>
+                            <span class="mx-2 text-gray-400">•</span>
+                            <span class="text-sm text-gray-300">Action, Drama</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Request Section -->
+    <section class="py-16 container mx-auto px-4">
+        <div class="bg-gradient-to-r from-red-900/30 to-gray-900/30 backdrop-blur-sm rounded-2xl p-8 md:p-12 text-center shadow-xl border border-red-500/20">
+            <h2 class="text-2xl md:text-3xl font-bold mb-4 red-gradient">Request Your Favorite Anime</h2>
+            <p class="mb-6 text-gray-300 max-w-xl mx-auto">Can't find what you're looking for? Let us know and we'll add it to our collection!</p>
+            <a href="#" class="inline-flex items-center gap-2 px-8 py-3 bg-red-600 hover:bg-red-700 rounded-full text-white font-medium transition duration-300 shadow-lg shadow-red-600/30">
+                <i data-feather="message-circle" class="w-5 h-5"></i>
+                <span>Submit Request</span>
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800/80 backdrop-blur-sm py-12">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+                <div>
+                    <div class="flex items-center mb-4">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-r from-red-600 to-red-500 flex items-center justify-center text-xl font-bold">S</div>
+                        <div class="ml-3">
+                            <h3 class="text-xl font-bold red-gradient">Senpai Anime</h3>
+                        </div>
+                    </div>
+                    <p class="text-gray-400">Your personal anime collection website. Host and manage your favorite anime series with custom descriptions and metadata.</p>
+                    
+                    <div class="mt-6 flex space-x-4">
+                        <a href="#" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 hover:bg-red-600 hover:text-white transition duration-300">
+                            <i data-feather="twitter" class="w-5 h-5"></i>
+                        </a>
+                        <a href="#" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 hover:bg-red-600 hover:text-white transition duration-300">
+                            <i data-feather="github" class="w-5 h-5"></i>
+                        </a>
+                        <a href="#" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 hover:bg-red-600 hover:text-white transition duration-300">
+                            <i data-feather="instagram" class="w-5 h-5"></i>
+                        </a>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-xl font-bold mb-4 text-red-400">Quick Links</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Home
+                        </a></li>
+                        <li><a href="#latest" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Latest Uploads
+                        </a></li>
+                        <li><a href="#trending" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Trending
+                        </a></li>
+                        <li><a href="#categories" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Categories
+                        </a></li>
+                        <li><a href="admin.html" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Admin Panel
+                        </a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h3 class="text-xl font-bold mb-4 text-red-400">Legal</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Privacy Policy
+                        </a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Terms of Service
+                        </a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> DMCA
+                        </a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-red-400 transition duration-300 flex items-center gap-2">
+                            <i data-feather="chevron-right" class="w-4 h-4"></i> Contact Us
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-10 pt-6 border-t border-gray-700 text-center text-gray-500 text-sm">
+                <p>&copy; 2025 Senpai Anime. All rights reserved.</p>
+                <p class="mt-1">A personal anime collection website.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
