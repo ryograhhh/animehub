@@ -64,7 +64,7 @@
                         const progress = history.progress || 0;
                         continueWatchingContainer.innerHTML += createAnimeCard(
                             anime, 
-                            `Ep ${history.episode || anime.currentEpisode}`, 
+                            `Ep ${history.episode || anime.currentEpisode || 1}`, 
                             progress
                         );
                     }
@@ -84,6 +84,15 @@
         
         // Function to create anime card HTML
         function createAnimeCard(anime, badgeText = 'New', progress = null) {
+            // Get episode count
+            const episodes = anime.episodes || [];
+            const episodeCount = episodes.length || 1;
+            
+            // Get latest episode
+            const currentEp = episodes.length > 0 
+                ? Math.max(...episodes.map(ep => parseInt(ep.episode)))
+                : anime.currentEpisode || 1;
+                
             return `
                 <div class="group flex flex-col overflow-hidden bg-gray-800/60 backdrop-blur-sm rounded-xl shadow-lg transition duration-300 hover:transform hover:scale-105 hover:shadow-xl border border-gray-700/50">
                     <div class="relative h-64">
@@ -96,7 +105,7 @@
                         </span>
                         <div class="absolute bottom-0 left-0 right-0 px-4 py-3">
                             <span class="text-white text-sm flex items-center gap-2">
-                                <i data-feather="play-circle" class="w-4 h-4"></i> Episode ${anime.currentEpisode || '1'}
+                                <i data-feather="play-circle" class="w-4 h-4"></i> Episode ${currentEp}
                             </span>
                             ${progress !== null ? `
                                 <div class="w-full h-1 bg-gray-600 rounded-full mt-2 overflow-hidden">
@@ -104,7 +113,7 @@
                                 </div>
                             ` : ''}
                         </div>
-                        <a href="watch.html?id=${anime.id}&ep=${anime.currentEpisode || '1'}" 
+                        <a href="watch.html?id=${anime.id}&ep=${currentEp}" 
                            class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/60 transition-opacity duration-300">
                             <div class="bg-red-600 rounded-full w-16 h-16 flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
                                 <i data-feather="play" class="w-8 h-8"></i>
@@ -121,12 +130,12 @@
                             <span>${anime.language || 'Subtitled'}</span>
                         </div>
                         <div class="flex justify-between items-center mt-auto pt-3">
-                            <a href="watch.html?id=${anime.id}&ep=${anime.currentEpisode || '1'}" 
+                            <a href="watch.html?id=${anime.id}&ep=${currentEp}" 
                                class="text-red-400 hover:text-red-300 text-sm font-medium flex items-center gap-1 transition-colors duration-300">
                                 <span>Watch Now</span>
                                 <i data-feather="arrow-right" class="w-4 h-4"></i>
                             </a>
-                            <span class="text-xs text-gray-500">${anime.totalEpisodes || anime.currentEpisode || 1} Episodes</span>
+                            <span class="text-xs text-gray-500">${episodeCount} ${episodeCount === 1 ? 'Episode' : 'Episodes'}</span>
                         </div>
                     </div>
                 </div>
@@ -189,8 +198,14 @@
                 `;
             } else {
                 filteredAnime.slice(0, 5).forEach(anime => {
+                    // Get current episode
+                    const episodes = anime.episodes || [];
+                    const currentEp = episodes.length > 0 
+                        ? Math.max(...episodes.map(ep => parseInt(ep.episode)))
+                        : anime.currentEpisode || 1;
+                        
                     resultsContainer.innerHTML += `
-                        <a href="watch.html?id=${anime.id}&ep=1" 
+                        <a href="watch.html?id=${anime.id}&ep=${currentEp}" 
                            class="flex items-center gap-3 p-3 hover:bg-gray-700 transition duration-200">
                             <img src="${anime.thumbnail || 'https://placehold.co/300x400/1f2937/FFFFFF?text=Anime'}" 
                                  alt="${anime.title}" class="w-12 h-16 object-cover rounded">
@@ -494,7 +509,7 @@
             <a href="#" class="px-4 py-6 glassmorphism hover:bg-red-600/20 rounded-xl transition duration-300 flex flex-col items-center justify-center group border border-gray-700/50 hover:border-red-500/50">
                 <i data-feather="cpu" class="w-6 h-6 mb-2 group-hover:scale-125 transition-transform duration-300"></i>
                 <span>Sci-Fi</span>
-            </a>
+          </a>
         </div>
     </section>
 
