@@ -58,14 +58,19 @@
             
             // Set video source based on the episode
             const videoPlayer = document.getElementById('videoPlayer');
-            let videoUrl = anime.videoUrl;
+            let videoUrl = null;
             
-            // Check if we have episodes array and the specific episode
+            // Find the episode in the episodes array
             if (anime.episodes && anime.episodes.length > 0) {
-                const episodeObj = anime.episodes.find(ep => ep.episode == episodeNum);
-                if (episodeObj && episodeObj.videoUrl) {
-                    videoUrl = episodeObj.videoUrl;
+                const episode = anime.episodes.find(ep => ep.episode == episodeNum);
+                if (episode && episode.videoUrl) {
+                    videoUrl = episode.videoUrl;
                 }
+            }
+            
+            // If no specific episode video found, try using the main anime video
+            if (!videoUrl && anime.videoUrl) {
+                videoUrl = anime.videoUrl;
             }
             
             if (videoUrl) {
@@ -98,26 +103,57 @@
             }
             
             // Populate episodes list
-            const totalEpisodes = parseInt(anime.totalEpisodes || anime.currentEpisode || 1);
-            const episodesList = document.getElementById('episodesList');
-            episodesList.innerHTML = '';
-            
-            for (let i = 1; i <= totalEpisodes; i++) {
-                const isCurrentEp = i == episodeNum;
-                
-                episodesList.innerHTML += `
-                    <a href="watch.html?id=${animeId}&ep=${i}" 
-                       class="w-12 h-12 flex items-center justify-center rounded-lg ${isCurrentEp ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'} transition duration-300">
-                        ${i}
-                    </a>
-                `;
-            }
+            populateEpisodesList(anime);
             
             // Populate related anime
             loadRelatedAnime(anime.genre);
             
             // Replace feather icons
             feather.replace();
+        }
+
+        // Function to populate episodes list
+        function populateEpisodesList(anime) {
+            const episodesList = document.getElementById('episodesList');
+            const currentEpisode = parseInt(getEpisodeNumber());
+            
+            // Clear current episodes list
+            episodesList.innerHTML = '';
+            
+            // If anime has dedicated episodes
+            if (anime.episodes && anime.episodes.length > 0) {
+                // Get all episode numbers
+                const episodeNumbers = anime.episodes.map(ep => parseInt(ep.episode));
+                
+                // Sort episode numbers
+                episodeNumbers.sort((a, b) => a - b);
+                
+                // Create episode buttons
+                episodeNumbers.forEach(epNum => {
+                    const isCurrentEp = epNum == currentEpisode;
+                    
+                    episodesList.innerHTML += `
+                        <a href="watch.html?id=${anime.id}&ep=${epNum}" 
+                           class="w-12 h-12 flex items-center justify-center rounded-lg ${isCurrentEp ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'} transition duration-300">
+                            ${epNum}
+                        </a>
+                    `;
+                });
+            } else {
+                // If no dedicated episodes, just show a single episode
+                const totalEpisodes = parseInt(anime.totalEpisodes || 1);
+                
+                for (let i = 1; i <= totalEpisodes; i++) {
+                    const isCurrentEp = i == currentEpisode;
+                    
+                    episodesList.innerHTML += `
+                        <a href="watch.html?id=${anime.id}&ep=${i}" 
+                           class="w-12 h-12 flex items-center justify-center rounded-lg ${isCurrentEp ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'} transition duration-300">
+                            ${i}
+                        </a>
+                    `;
+                }
+            }
         }
         
         // Load related anime based on genre
@@ -146,6 +182,10 @@
             
             relatedContainer.innerHTML = '';
             relatedAnime.forEach(anime => {
+                // Get first episode
+                const firstEp = anime.episodes && anime.episodes.length > 0 ? 
+                    Math.min(...anime.episodes.map(ep => parseInt(ep.episode))) : 1;
+                
                 relatedContainer.innerHTML += `
                     <div class="flex-shrink-0 w-full bg-gray-800/60 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-700/50 mb-4">
                         <div class="relative h-48">
@@ -155,9 +195,9 @@
                             <div class="absolute bottom-0 left-0 right-0 p-4">
                                 <h3 class="text-lg font-bold text-white">${anime.title}</h3>
                                 <div class="flex items-center mt-1">
-                                    <span class="text-sm text-gray-300">Ep ${anime.currentEpisode || 1}</span>
+                                    <span class="text-sm text-gray-300">${anime.episodes ? anime.episodes.length : 1} Episodes</span>
                                 </div>
-                                <a href="watch.html?id=${anime.id}&ep=1" class="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-700 rounded-md text-white text-sm transition duration-300">
+                                <a href="watch.html?id=${anime.id}&ep=${firstEp}" class="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-700 rounded-md text-white text-sm transition duration-300">
                                     <i data-feather="play" class="w-3 h-3"></i> Watch
                                 </a>
                             </div>
@@ -339,6 +379,7 @@
                 </div>
                 
                 <div>
+                    <div>
                     <h3 class="text-lg font-semibold mb-3">Server Selection</h3>
                     <div class="flex flex-wrap gap-2">
                         <button class="px-4 py-2 bg-red-600 text-white rounded-lg">Server 1</button>
