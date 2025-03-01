@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Senpai Anime</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        // Function to generate a unique ID
+        function generateId() {
+            return 'anime_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // Function to load existing anime data
+        function loadExistingAnime() {
+            const animeList = document.getElementById('animeList');
+            const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            const statsContainer = document.getElementById('statsContainer');
+            
+            // Update stats
+            if (statsContainer) {
+                statsContainer.innerHTML = `
+                    <div class="bg-gradient-to-br from-red-900/50 to-red-700/50 backdrop-blur-sm rounded-xl p-5 flex items-center">
+                        <div class="w-12 h-12 rounded-full bg-red-600/50 flex items-center justify-center mr-4">
+                            <i data-feather="film" class="w-5 h-5 text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">Total Anime</h3>
+                            <p class="text-2xl font-bold text-white">${animeData.length}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-purple-900/50 to-purple-700/50 backdrop-blur-sm rounded-xl p-5 flex items-center">
+                        <div class="w-12 h-12 rounded-full bg-purple-600/50 flex items-center justify-center mr-4">
+                            <i data-feather="tv" class="w-5 h-5 text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">Total Episodes</h3>
+                            <p class="text-2xl font-bold text-white">${animeData.reduce((sum, anime) => sum + (parseInt(anime.currentEpisode) || 1), 0)}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-blue-900/50 to-blue-700/50 backdrop-blur-sm rounded-xl p-5 flex items-center">
+                        <div class="w-12 h-12 rounded-full bg-blue-600/50 flex items-center justify-center mr-4">
+                            <i data-feather="eye" class="w-5 h-5 text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">Total Views</h3>
+                            <p class="text-2xl font-bold text-white">${animeData.reduce((sum, anime) => sum + (parseInt(anime.views) || 0), 0)}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-pink-900/50 to-pink-700/50 backdrop-blur-sm rounded-xl p-5 flex items-center">
+                        <div class="w-12 h-12 rounded-full bg-pink-600/50 flex items-center justify-center mr-4">
+                            <i data-feather="calendar" class="w-5 h-5 text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">Last Upload</h3>
+                            <p class="text-2xl font-bold text-white">${animeData.length > 0 ? new Date(Math.max(...animeData.map(a => new Date(a.dateAdded)))).toLocaleDateString() : 'None'}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (animeData.length === 0) {
+                animeList.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-400">
+                            <div class="flex flex-col items-center">
+                                <i data-feather="inbox" class="w-12 h-12 mb-4 text-gray-600"></i>
+                                <p class="text-lg">No anime uploaded yet</p>
+                                <p class="text-sm text-gray-500 mb-4">Add your first anime using the form above</p>
+                                <button onclick="document.getElementById('title').focus()" 
+                                        class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition duration-300 text-white">
+                                    <i data-feather="plus" class="w-4 h-4 mr-2"></i> Add Your First Anime
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Sort by date added (newest first)
+            animeData.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+            
+            animeList.innerHTML = '';
+            animeData.forEach(anime => {
+                animeList.innerHTML += `
+                    <tr class="border-b border-gray-700 hover:bg-gray-800/50 transition duration-200">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center space-x-3">
+                                <img src="${anime.thumbnail || 'https://placehold.co/100x150/1f2937/FFFFFF?text=Anime'}" 
+                                     alt="${anime.title}" 
+                                     class="w-12 h-16 object-cover rounded">
+                                <div>
+                                    <div class="font-medium text-white">${anime.title}</div>
+                                    <div class="text-sm text-gray-400 flex items-center gap-1">
+                                        <span>${anime.genre || 'No genre'}</span>
+                                        <span class="mx-1">•</span>
+                                        <span>${anime.language || 'Subtitled'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 bg-red-900/50 text-red-300 rounded-md text-xs">
+                                ${anime.currentEpisode || 'N/A'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 max-w-xs truncate">${anime.description || 'No description'}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <i data-feather="eye" class="w-4 h-4 text-gray-500"></i>
+                                <span>${anime.views || 0}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">${new Date(anime.dateAdded).toLocaleDateString()}</td>
+                        <td class="px-6 py-4">
+                            ${anime.videoUrl ? `
+                                <span class="px-2 py-1 bg-green-900/50 text-green-300 rounded-md text-xs">
+                                    <i data-feather="check" class="w-3 h-3 mr-1 inline"></i> Available
+                                </span>
+                            ` : `
+                                <span class="px-2 py-1 bg-gray-700 text-gray-400 rounded-md text-xs">
+                                    <i data-feather="x" class="w-3 h-3 mr-1 inline"></i> None
+                                </span>
+                            `}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex gap-2">
+                                <button onclick="editAnime('${anime.id}')" 
+                                        class="flex items-center justify-center w-8 h-8 bg-blue-600/50 text-white rounded hover:bg-blue-700 transition duration-300"
+                                        title="Edit">
+                                    <i data-feather="edit" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="deleteAnime('${anime.id}')" 
+                                        class="flex items-center justify-center w-8 h-8 bg-red-600/50 text-white rounded hover:bg-red-700 transition duration-300"
+                                        title="Delete">
+                                    <i data-feather="trash" class="w-4 h-4"></i>
+                                </button>
+                                <a href="watch.html?id=${anime.id}&ep=1" 
+                                   class="flex items-center justify-center w-8 h-8 bg-purple-600/50 text-white rounded hover:bg-purple-700 transition duration-300"
+                                   title="Preview" target="_blank">
+                                    <i data-feather="eye" class="w-4 h-4"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            // Replace feather icons
+            feather.replace();
+        }
+        
+        // Function to handle form submission
+        function handleFormSubmit(event) {
+            event.preventDefault();
+            
+            // Show loading state
+            const submitBtn = document.getElementById('submitBtn');
+            const originalBtnText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i data-feather="loader" class="w-5 h-5 animate-spin mr-2"></i> Processing...`;
+            feather.replace();
+            
+            // Get values from form
+            const title = document.getElementById('title').value.trim();
+            const genre = document.getElementById('genre').value;
+            const currentEpisode = document.getElementById('currentEpisode').value;
+            const totalEpisodes = document.getElementById('totalEpisodes').value || currentEpisode || '1';
+            const thumbnail = document.getElementById('thumbnail').value;
+            const language = document.getElementById('language').value;
+            const description = document.getElementById('description').value;
+            const videoUrl = document.getElementById('videoUrl').value;
+            
+            // Check if we're editing or adding new
+            const editingId = document.getElementById('editingId').value;
+            
+            // Get existing data
+            let animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            
+            // Check for duplicate anime title when adding new
+            if (!editingId) {
+                const isDuplicate = animeData.some(anime => anime.title.toLowerCase() === title.toLowerCase());
+                
+                if (isDuplicate) {
+                    // Find the existing anime with the same title
+                    const existingAnime = animeData.find(anime => anime.title.toLowerCase() === title.toLowerCase());
+                    
+                    // Ask if user wants to add a new episode instead
+                    const shouldAddEpisode = confirm(`An anime with the title "${title}" already exists. Would you like to add a new episode to it instead?`);
+                    
+                    if (shouldAddEpisode) {
+                        // Add new episode to existing anime
+                        const episodes = existingAnime.episodes || [];
+                        
+                        // Check if episode number already exists
+                        const episodeExists = episodes.some(ep => ep.episode == currentEpisode);
+                        
+                        if (episodeExists) {
+                            alert(`Episode ${currentEpisode} already exists for "${title}". Please choose a different episode number.`);
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalBtnText;
+                            feather.replace();
+                            return;
+                        }
+                        
+                        // Add new episode
+                        episodes.push({
+                            episode: parseInt(currentEpisode) || episodes.length + 1,
+                            videoUrl: videoUrl,
+                            dateAdded: new Date().toISOString()
+                        });
+                        
+                        // Update existing anime
+                        existingAnime.episodes = episodes;
+                        existingAnime.currentEpisode = Math.max(...episodes.map(ep => ep.episode));
+                        existingAnime.totalEpisodes = Math.max(existingAnime.totalEpisodes || 0, existingAnime.currentEpisode);
+                        existingAnime.lastUpdated = new Date().toISOString();
+                        
+                        // Save to localStorage
+                        localStorage.setItem('animeData', JSON.stringify(animeData));
+                        
+                        // Show success notification
+                        showNotification(`Episode ${currentEpisode} added to "${title}" successfully!`);
+                        
+                        // Reset form
+                        document.getElementById('animeForm').reset();
+                        
+                        // Restore button state
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                        feather.replace();
+                        
+                        // Update the table
+                        loadExistingAnime();
+                        
+                        return;
+                    }
+                    
+                    // If user doesn't want to add episode, show error and return
+                    alert(`An anime with the title "${title}" already exists. Please use a different title.`);
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                    feather.replace();
+                    return;
+                }
+            }
+            
+            // Process video file if exists
+            const videoFile = document.getElementById('videoFile').files[0];
+            
+            // Function to complete the submission
+            const completeSubmission = (finalVideoUrl) => {
+                if (editingId) {
+                    // Update existing anime
+                    const index = animeData.findIndex(anime => anime.id === editingId);
+                    if (index !== -1) {
+                        // Create episodes array if not exists
+                        if (!animeData[index].episodes) {
+                            animeData[index].episodes = [
+                                {
+                                    episode: parseInt(currentEpisode) || 1,
+                                    videoUrl: finalVideoUrl || videoUrl || animeData[index].videoUrl,
+                                    dateAdded: animeData[index].dateAdded
+                                }
+                            ];
+                        }
+                        
+                        animeData[index] = {
+                            ...animeData[index],
+                            title,
+                            genre,
+                            currentEpisode,
+                            totalEpisodes,
+                            thumbnail,
+                            language,
+                            description,
+                            videoUrl: finalVideoUrl || videoUrl || animeData[index].videoUrl,
+                            lastUpdated: new Date().toISOString()
+                        };
+                    }
+                } else {
+                    // Add new anime
+                    const newAnime = {
+                        id: generateId(),
+                        title,
+                        genre,
+                        currentEpisode,
+                        totalEpisodes,
+                        thumbnail,
+                        language,
+                        description,
+                        videoUrl: finalVideoUrl || videoUrl,
+                        views: 0,
+                        dateAdded: new Date().toISOString(),
+                        lastUpdated: new Date().toISOString(),
+                        episodes: [
+                            {
+                                episode: parseInt(currentEpisode) || 1,
+                                videoUrl: finalVideoUrl || videoUrl,
+                                dateAdded: new Date().toISOString()
+                            }
+                        ]
+                    };
+                    
+                    animeData.push(newAnime);
+                }
+                
+                // Save to localStorage
+                localStorage.setItem('animeData', JSON.stringify(animeData));
+                
+                // Reset form and update list
+                document.getElementById('animeForm').reset();
+                document.getElementById('editingId').value = '';
+                document.getElementById('formTitle').textContent = 'Add New Anime';
+                document.getElementById('submitBtn').innerHTML = '<i data-feather="plus-circle" class="w-5 h-5 mr-2"></i> Add Anime';
+                feather.replace();
+                document.getElementById('videoPreview').innerHTML = '';
+                document.getElementById('thumbnailPreview').style.backgroundImage = '';
+                document.getElementById('thumbnailPreview').classList.add('hidden');
+                
+                // Update the table
+                loadExistingAnime();
+                
+                // Show success notification
+                showNotification(editingId ? 'Anime updated successfully!' : 'Anime added successfully!');
+                
+                // Restore button state
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+                feather.replace();
+            };
+            
+            // If there's a video file, process it
+            if (videoFile) {
+                // In a real app, this would upload to a server
+                // Here we'll simulate it with a timeout
+                setTimeout(() => {
+                    // Extract file name to detect episode number
+                    const fileName = videoFile.name;
+                    
+                    // Try to extract episode number from filename if not already set
+                    if (!currentEpisode || currentEpisode === '1') {
+                        const episodeMatch = fileName.match(/[Ee]pisode\s*(\d+)|[Ee]p\s*(\d+)|[Ee]\s*(\d+)|S\d+E(\d+)/);
+                        if (episodeMatch) {
+                            const extractedEp = episodeMatch.slice(1).find(match => match && !isNaN(match));
+                            if (extractedEp) {
+                                document.getElementById('currentEpisode').value = extractedEp;
+                            }
+                        }
+                    }
+                    
+                    // Show notification for demo
+                    showNotification(`Video file "${videoFile.name}" processed`);
+                    
+                    // Complete submission
+                    // In a real app, this would be the URL returned from the server
+                    completeSubmission(URL.createObjectURL(videoFile));
+                }, 1000);
+            } else {
+                // No video file, complete submission directly
+                completeSubmission(null);
+            }
+        }
+        
+        // Function to edit anime
+        function editAnime(id) {
+            const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            const anime = animeData.find(a => a.id === id);
+            
+            if (anime) {
+                // Fill form with anime data
+                document.getElementById('title').value = anime.title;
+                document.getElementById('genre').value = anime.genre || '';
+                document.getElementById('currentEpisode').value = anime.currentEpisode || '';
+                document.getElementById('totalEpisodes').value = anime.totalEpisodes || '';
+                document.getElementById('thumbnail').value = anime.thumbnail || '';
+                document.getElementById('language').value = anime.language || '';
+                document.getElementById('description').value = anime.description || '';
+                document.getElementById('videoUrl').value = anime.videoUrl || '';
+                document.getElementById('editingId').value = anime.id;
+                
+                // Show thumbnail preview if exists
+                if (anime.thumbnail) {
+                    document.getElementById('thumbnailPreview').style.backgroundImage = `url(${anime.thumbnail})`;
+                    document.getElementById('thumbnailPreview').classList.remove('hidden');
+                }
+                
+                // Show video preview if exists
+                if (anime.videoUrl) {
+                    document.getElementById('videoPreview').innerHTML = `
+                        <div class="relative">
+                            <video src="${anime.videoUrl}" class="w-full h-auto rounded-lg" controls></video>
+                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                Current video
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Update form title and button
+                document.getElementById('formTitle').textContent = 'Edit Anime';
+                document.getElementById('submitBtn').innerHTML = '<i data-feather="save" class="w-5 h-5 mr-2"></i> Update Anime';
+                feather.replace();
+                
+                // Scroll to form and highlight it
+                document.getElementById('animeFormCard').classList.add('border-red-500');
+                document.getElementById('animeFormCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                // Remove highlight after animation
+                setTimeout(() => {
+                    document.getElementById('animeFormCard').classList.remove('border-red-500');
+                }, 2000);
+            }
+        }
+        
+        // Function to delete anime
+        function deleteAnime(id) {
+            if (confirm('Are you sure you want to delete this anime? This action cannot be undone.')) {
+                let animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+                animeData = animeData.filter(anime => anime.id !== id);
+                localStorage.setItem('animeData', JSON.stringify(animeData));
+                
+                // Update the table
+                loadExistingAnime();
+                
+                // Show notification
+                showNotification('Anime deleted successfully!');
+            }
+        }
+        
+        // Function to show notification
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.className = `fixed top-6 right-6 px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 z-50 ${
+                type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            }`;
+            notification.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <i data-feather="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-5 h-5"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            feather.replace();
+            notification.classList.remove('opacity-0');
+            notification.classList.add('opacity-100');
+            
+            // Hide after 3 seconds
+            setTimeout(() => {
+                notification.classList.remove('opacity-100');
+                notification.classList.add('opacity-0');
+            }, 3000);
+        }
+        
+        // Helper function to handle thumbnail file uploads
+        function handleThumbnailUpload(event) {
+            const file = event.target.files[0];
+            
+            if (!file) return;
+            
+            // Check file type
+            if (!file.type.startsWith('image/')) {
+                showNotification('Please select an image file', 'error');
+                event.target.value = '';
+                return;
+            }
+            
+            // Show thumbnail preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('thumbnailPreview').style.backgroundImage = `url(${e.target.result})`;
+                document.getElementById('thumbnailPreview').classList.remove('hidden');
+                document.getElementById('thumbnail').value = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            
+            // Update file name display
+            document.getElementById('imageFileName').textContent = file.name;
+        }
+        
+        // Helper function to handle video file uploads
+        function handleVideoUpload(event) {
+            const file = event.target.files[0];
+            
+            if (!file) return;
+            
+            // Check file type
+            if (!file.type.startsWith('video/')) {
+                showNotification('Please select a video file', 'error');
+                event.target.value = '';
+                return;
+            }
+            
+            // Extract episode number from filename
+            const fileName = file.name;
+            const episodeMatch = fileName.match(/[Ee]pisode\s*(\d+)|[Ee]p\s*(\d+)|[Ee]\s*(\d+)|S\d+E(\d+)/);
+            
+            if (episodeMatch) {
+                // Find the first capture group that's not undefined and is a number
+                const extractedEp = episodeMatch.slice(1).find(match => match && !isNaN(match));
+                if (extractedEp) {
+                    document.getElementById('currentEpisode').value = extractedEp;
+                    showNotification(`Episode ${extractedEp} detected from filename!`);
+                }
+            }
+            
+            // Video preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('videoPreview').innerHTML = `
+                    <div class="relative rounded-lg overflow-hidden">
+                        <video src="${e.target.result}" class="w-full h-auto" controls></video>
+                        <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                            ${formatFileSize(file.size)}
+                        </div>
+                    </div>
+                `;
+            };
+            reader.readAsDataURL(file);
+            
+            // Update file name display
+            document.getElementById('videoFileName').textContent = file.name;
+        }
+        
+        // Helper function to format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            // Replace all feather icons
+            feather.replace();
+            
+            // Load existing anime data
+            loadExistingAnime();
+            
+            // Set up form submission handler
+            document.getElementById('animeForm').addEventListener('submit', handleFormSubmit);
+            
+            // Set up file upload handlers
+            document.getElementById('thumbnailFile').addEventListener('change', handleThumbnailUpload);
+            document.getElementById('videoFile').addEventListener('change', handleVideoUpload);
+        });
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(31, 41, 55, 0.5);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(239, 68, 68, 0.6);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(239, 68, 68, 0.8);
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { border-color: rgba(239, 68, 68, 0.5); }
+            50% { border-color: rgba(239, 68, 68, 1); }
+        }
+        
+        .animate-pulse-border {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        /* Red gradient for heading */
+        .red-gradient {
+            background: linear-gradient(90deg, #ff4b4b 0%, #ff0000 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+        }
+        
+        /* Glassmorphism effect */
+        .glassmorphism {
+            background: rgba(17, 24, 39, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 77, 77, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Notification -->
+    <div id="notification" class="opacity-0 transition-opacity duration-300 z-50"></div>
+    
+    <!-- Header -->
+<header class="bg-gray-800/80 backdrop-blur-md shadow-lg sticky top-0 z-40">
+    <div class="container mx-auto px-4 py-3">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-r from-red-600 to-red-500 flex items-center justify-center text-xl font-bold">S</div>
+                <div class="ml-3">
+                    <h1 class="text-xl font-bold red-gradient">Senpai Anime</h1>
+                    <p class="text-xs text-red-400">Admin Panel</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <a href="index.html" class="px-4 py-2 bg-gray-700/80 hover:bg-gray-600 rounded-lg transition duration-300 text-sm flex items-center gap-2">
+                    <i data-feather="home"></i>
+                    <span class="hidden sm:inline">Back to Website</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Main Content -->
+<main class="container mx-auto px-4 py-8">
+    <!-- Stats Dashboard -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" id="statsContainer">
+        <!-- Stats will be populated via JavaScript -->
+        <div class="bg-gray-800/60 backdrop-blur-sm rounded-xl p-5 animate-pulse">
+            <div class="h-12 w-12 bg-gray-700 rounded-full mb-4"></div>
+            <div class="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
+            <div class="h-6 bg-gray-700 rounded w-1/4"></div>
+        </div>
+        <div class="bg-gray-800/60 backdrop-blur-sm rounded-xl p-5 animate-pulse">
+            <div class="h-12 w-12 bg-gray-700 rounded-full mb-4"></div>
+            <div class="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
+            <div class="h-6 bg-gray-700 rounded w-1/4"></div>
+        </div>
+        <div class="bg-gray-800/60 backdrop-blur-sm rounded-xl p-5 animate-pulse">
+            <div class="h-12 w-12 bg-gray-700 rounded-full mb-4"></div>
+            <div class="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
+            <div class="h-6 bg-gray-700 rounded w-1/4"></div>
+        </div>
+        <div class="bg-gray-800/60 backdrop-blur-sm rounded-xl p-5 animate-pulse">
+            <div class="h-12 w-12 bg-gray-700 rounded-full mb-4"></div>
+            <div class="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
+            <div class="h-6 bg-gray-700 rounded w-1/4"></div>
+        </div>
+    </div>
+    
+    <!-- Admin Dashboard -->
+    <div id="animeFormCard" class="bg-gray-800/60 backdrop-blur-sm rounded-xl p-6 shadow-lg mb-8 border border-transparent transition-colors duration-500">
+        <h2 class="text-2xl font-bold text-red-400 mb-6 flex items-center gap-2" id="formTitle">
+            <i data-feather="plus-circle"></i> Add New Anime
+        </h2>
+        
+        <form id="animeForm" class="space-y-6">
+            <input type="hidden" id="editingId" value="">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="title" class="block text-sm font-medium mb-2">Anime Title</label>
+                    <input type="text" id="title" required
+                           class="w-full px-4 py-2 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600">
+                </div>
+                
+                <div>
+                    <label for="genre" class="block text-sm font-medium mb-2">Genre</label>
+                    <select id="genre" required
+                            class="w-full px-4 py-2 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600">
+                        <option value="">Select Genre</option>
+                        <option value="Action">Action</option>
+                        <option value="Adventure">Adventure</option>
+                        <option value="Comedy">Comedy</option>
+                        <option value="Drama">Drama</option>
+                        <option value="Fantasy">Fantasy</option>
+                        <option value="Horror">Horror</option>
+                        <option value="Isekai">Isekai</option>
+                        <option value="Mystery">Mystery</option>
+                        <option value="Romance">Romance</option>
+                        <option value="Sci-Fi">Sci-Fi</option>
+                        <option value="Slice of Life">Slice of Life</option>
+                        <option value="Sports">Sports</option>
+                        <option value="Supernatural">Supernatural</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="currentEpisode" class="block text-sm font-medium mb-2">Current Episode</label>
+                    <div class="flex gap-3">
+                        <input type="number" id="currentEpisode" min="1"
+                              class="w-full px-4 py-2 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600"
+                              placeholder="Auto-detected from video">
+                        <span class="px-3 py-2 bg-gray-700/70 rounded-lg border border-gray-600">of</span>
+                        <input type="number" id="totalEpisodes" min="1"
+                              class="w-full px-4 py-2 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600" 
+                              placeholder="Total episodes">
+                    </div>
+                </div>
+                
+                <div>
+                    <label for="language" class="block text-sm font-medium mb-2">Language</label>
+                    <select id="language" required
+                            class="w-full px-4 py-2 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600">
+                        <option value="">Select Language</option>
+                        <option value="Subtitled">Subtitled</option>
+                        <option value="Dubbed">Dubbed</option>
+                        <option value="Raw">Raw (No Subtitles)</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="thumbnail" class="block text-sm font-medium mb-2">Thumbnail URL</label>
+                    <div class="relative">
+                        <input type="url" id="thumbnail" placeholder="https://example.com/image.jpg"
+                              class="w-full px-4 py-2 pl-10 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600">
+                        <i data-feather="link" class="absolute left-3 top-3 text-gray-400 w-4 h-4"></i>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-400 flex items-center gap-2">
+                        <i data-feather="info" class="w-4 h-4"></i>
+                        <span id="imageFileName">No file selected</span>
+                    </div>
+                    <div id="thumbnailPreview" class="mt-3 h-40 w-28 bg-cover bg-center rounded-lg hidden"></div>
+                </div>
+                
+                <div>
+                    <label for="videoUrl" class="block text-sm font-medium mb-2">Video URL</label>
+                    <div class="relative">
+                        <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4"
+                              class="w-full px-4 py-2 pl-10 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600">
+                        <i data-feather="link" class="absolute left-3 top-3 text-gray-400 w-4 h-4"></i>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-400 flex items-center gap-2">
+                        <i data-feather="info" class="w-4 h-4"></i>
+                        <span id="videoFileName">No file selected</span>
+                    </div>
+                    <div id="videoPreview" class="mt-3"></div>
+                </div>
+                
+                <div class="md:col-span-2">
+                    <label for="description" class="block text-sm font-medium mb-2">Description</label>
+                    <textarea id="description" rows="4"
+                             class="w-full px-4 py-2 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600"></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium mb-2">Upload Thumbnail</label>
+                    <label class="flex items-center px-4 py-2 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition duration-300">
+                        <i data-feather="image" class="w-5 h-5 mr-2"></i>
+                        <span>Choose Image</span>
+                        <input type="file" id="thumbnailFile" accept="image/*" class="hidden">
+                    </label>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium mb-2">Upload Video</label>
+                    <label class="flex items-center px-4 py-2 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition duration-300">
+                        <i data-feather="video" class="w-5 h-5 mr-2"></i>
+                        <span>Choose Video</span>
+                        <input type="file" id="videoFile" accept="video/*" class="hidden">
+                    </label>
+                </div>
+            </div>
+            
+            <div class="flex justify-end">
+                <button type="submit" id="submitBtn"
+                        class="px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition duration-300 flex items-center gap-2">
+                    <i data-feather="plus-circle" class="w-5 h-5"></i> Add Anime
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Anime List -->
+    <div class="bg-gray-800/60 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden">
+        <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-red-400 flex items-center gap-2">
+                <i data-feather="film"></i> Anime Collection
+            </h2>
+            
+            <div class="relative">
+                <input type="text" id="tableSearch" placeholder="Search anime..." 
+                       class="px-4 py-2 pl-10 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600 text-sm">
+                <i data-feather="search" class="absolute left-3 top-2.5 text-gray-400 w-4 h-4"></i>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-700/70">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Anime</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Episode</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Description</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Views</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Date Added</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Video</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="animeList">
+                    <!-- Anime list will be populated via JavaScript -->
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-400">
+                            <div class="flex justify-center mb-4">
+                                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+                            </div>
+                            <p>Loading anime collection...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<!-- Footer -->
+<footer class="bg-gray-800/80 backdrop-blur-sm py-6 mt-12">
+    <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
+        <p>&copy; 2025 Senpai Anime Admin. All rights reserved.</p>
+        <p class="mt-1">A personal anime collection management system.</p>
+    </div>
+</footer>
+</body>
+</html>
