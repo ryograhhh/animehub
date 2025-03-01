@@ -43,15 +43,17 @@ const storage = multer.diskStorage({
   }
 });
 
-// Configure multer for file size limits
+// Configure multer for file size limits - increased to 200MB
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
+    fileSize: 200 * 1024 * 1024, // 200MB limit
   },
   fileFilter: function (req, file, cb) {
-    // Accept images and videos only
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+    // Accept images and videos only, specifically allowing MP4
+    if (file.mimetype.startsWith('image/') || 
+        file.mimetype.startsWith('video/') || 
+        file.mimetype === 'video/mp4') {
       cb(null, true);
     } else {
       cb(new Error('Only image and video files are allowed'));
@@ -63,8 +65,8 @@ const upload = multer({
 app.use(cors());
 app.use(express.static(path.join(__dirname)));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 // Routes
 app.get('/', (req, res) => {
@@ -102,7 +104,7 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
   }
 });
 
-// Endpoint to handle video uploads
+// Endpoint to handle video uploads, now with increased size limit
 app.post('/api/upload/video', upload.single('video'), (req, res) => {
   try {
     if (!req.file) {
