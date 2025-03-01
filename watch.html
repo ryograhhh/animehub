@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch Anime - Senpai Anime</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        // Get anime ID from URL parameter
+        function getAnimeId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('id');
+        }
+        
+        // Get episode number from URL parameter
+        function getEpisodeNumber() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('ep') || '1';
+        }
+        
+        // Load anime details
+        function loadAnimeDetails() {
+            const animeId = getAnimeId();
+            const episodeNum = getEpisodeNumber();
+            
+            if (!animeId) {
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            const anime = animeData.find(a => a.id === animeId);
+            
+            if (!anime) {
+                // Anime not found, redirect to home
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            // Get episodes data
+            const episodes = anime.episodes || [{ 
+                episode: 1, 
+                videoUrl: anime.videoUrl 
+            }];
+            
+            // Find current episode
+            const currentEpisode = episodes.find(ep => ep.episode == episodeNum) || episodes[0];
+            
+            // Update view count
+            anime.views = (anime.views || 0) + 1;
+            localStorage.setItem('animeData', JSON.stringify(animeData));
+            
+            // Add to watch history
+            addToWatchHistory(anime.id, parseInt(episodeNum), 0);
+            
+            // Update page title
+            document.title = `${anime.title} - Episode ${episodeNum} - Senpai Anime`;
+            
+            // Update anime details in the DOM
+            document.getElementById('animeTitle').textContent = anime.title;
+            document.getElementById('episodeTitle').textContent = `Episode ${episodeNum}`;
+            document.getElementById('animeDescription').textContent = anime.description || 'No description available.';
+            document.getElementById('animeGenre').textContent = anime.genre || 'Unknown';
+            document.getElementById('animeLanguage').textContent = anime.language || 'Subtitled';
+            
+            // Set video source
+            const videoPlayer = document.getElementById('videoPlayer');
+            const videoUrl = currentEpisode?.videoUrl || anime.videoUrl;
+            
+            if (videoUrl) {
+                videoPlayer.innerHTML = `
+                    <video class="w-full h-full" controls autoplay>
+                        <source src="${videoUrl}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                `;
+                
+                // Set up video progress tracking once video element is created
+                const videoElement = videoPlayer.querySelector('video');
+                if (videoElement) {
+                    videoElement.addEventListener('timeupdate', function() {
+                        const progress = (this.currentTime / this.duration) * 100;
+                        if (progress > 0 && this.duration > 0) {
+                            addToWatchHistory(getAnimeId(), getEpisodeNumber(), progress);
+                        }
+                    });
+                }
+            } else {
+                videoPlayer.innerHTML = `
+                    <div class="w-full h-full flex items-center justify-center bg-gray-800">
+                        <div class="text-center p-8">
+                            <i data-feather="film" class="w-16 h-16 text-gray-400 mb-4 mx-auto"></i>
+                            <p class="text-gray-300">No video available for this episode.</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Populate episodes list
+            const totalEpisodes = parseInt(anime.totalEpisodes || anime.currentEpisode || episodes.length || 1);
+            const episodesList = document.getElementById('episodesList');
+            episodesList.innerHTML = '';
+            
+            for (let i = 1; i <= totalEpisodes; i++) {
+                const isCurrentEp = i == episodeNum;
+                
+                episodesList.innerHTML += `
+                    <a href="watch.html?id=${animeId}&ep=${i}" 
+                       class="w-12 h-12 flex items-center justify-center rounded-lg ${isCurrentEp ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'} transition duration-300">
+                        ${i}
+                    </a>
+                `;
+            }
+            
+            // Populate related anime
+            loadRelatedAnime(anime.genre);
+            
+            // Replace feather icons
+            feather.replace();
+        }
+        
+        // Load related anime based on genre
+        function loadRelatedAnime(genre) {
+            const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            const animeId = getAnimeId();
+            
+            // Filter anime by genre and exclude current anime
+            const relatedAnime = animeData
+                .filter(a => a.genre === genre && a.id !== animeId)
+                .slice(0, 4);
+                
+            const relatedContainer = document.getElementById('relatedAnime');
+            
+            if (relatedAnime.length === 0) {
+                relatedContainer.innerHTML = '<p class="text-gray-400">No related anime found.</p>';
+                return;
+            }
+            
+            relatedContainer.innerHTML = '';
+            relatedAnime.forEach(anime => {
+                relatedContainer.innerHTML += `
+                    <div class="flex-shrink-0 w-full bg-gray-800/60 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-700/50 mb-4">
+                        <div class="relative h-48">
+                            <img src="${anime.thumbnail || 'https://placehold.co/300x400/1f2937/FFFFFF?text=Anime'}" 
+                                 alt="${anime.title}" class="w-full h-full object-cover">
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                            <div class="absolute bottom-0 left-0 right-0 p-4">
+                                <h3 class="text-lg font-bold text-white">${anime.title}</h3>
+                                <div class="flex items-center mt-1">
+                                    <span class="text-sm text-gray-300">Ep ${anime.currentEpisode || 1}</span>
+                                </div>
+                                <a href="watch.html?id=${anime.id}&ep=1" class="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-700 rounded-md text-white text-sm transition duration-300">
+                                    <i data-feather="play" class="w-3 h-3"></i> Watch
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            // Replace feather icons
+            feather.replace();
+        }
+        
+        // Function to add to watch history
+        function addToWatchHistory(animeId, episode, progress = 0) {
+            const watchHistory = JSON.parse(localStorage.getItem('watchHistory') || '[]');
+            
+            // Check if this anime is already in history
+            const existingIndex = watchHistory.findIndex(item => item.animeId === animeId);
+            
+            if (existingIndex !== -1) {
+                // Update existing entry
+                watchHistory[existingIndex] = {
+                    animeId,
+                    episode,
+                    progress,
+                    lastWatched: new Date().toISOString()
+                };
+            } else {
+                // Add new entry
+                watchHistory.push({
+                    animeId,
+                    episode,
+                    progress,
+                    lastWatched: new Date().toISOString()
+                });
+            }
+            
+            // Keep only latest 20 items
+            const limitedHistory = watchHistory.sort((a, b) => 
+                new Date(b.lastWatched) - new Date(a.lastWatched)
+            ).slice(0, 20);
+            
+            localStorage.setItem('watchHistory', JSON.stringify(limitedHistory));
+        }
+        
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            // Replace all feather icons
+            feather.replace();
+            
+            // Load anime details
+            loadAnimeDetails();
+        });
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(31, 41, 55, 0.5);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(239, 68, 68, 0.6);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(239, 68, 68, 0.8);
+        }
+        
+        /* Red gradient for heading */
+        .red-gradient {
+            background: linear-gradient(90deg, #ff4b4b 0%, #ff0000 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+        }
+        
+        /* Glassmorphism effect */
+        .glassmorphism {
+            background: rgba(17, 24, 39, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 77, 77, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 glassmorphism shadow-xl">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <a href="index.html" class="flex items-center">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-r from-red-600 to-red-500 flex items-center justify-center text-xl font-bold">S</div>
+                        <div class="ml-3">
+                            <h1 class="text-xl font-bold red-gradient">
+                                Senpai Anime
+                            </h1>
+                            <p class="text-xs text-red-400">Your Personal Collection</p>
+                        </div>
+                    </a>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <a href="index.html" class="flex items-center gap-2 text-gray-300 hover:text-red-400 transition duration-300">
+                        <i data-feather="arrow-left" class="w-4 h-4"></i>
+                        <span>Back to Home</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Video Player Section -->
+        <section class="mb-8">
+            <div id="videoPlayer" class="w-full aspect-video bg-gray-800 rounded-xl overflow-hidden">
+                <!-- Video will be loaded here -->
+                <div class="w-full h-full flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Anime Details Section -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+            <div class="lg:col-span-2">
+                <h1 id="animeTitle" class="text-3xl font-bold mb-1">Loading...</h1>
+                <h2 id="episodeTitle" class="text-xl text-red-400 mb-4">Episode</h2>
+                
+                <div class="flex items-center flex-wrap gap-3 mb-6">
+                    <span class="px-3 py-1 bg-red-600/40 text-red-300 rounded-full text-sm flex items-center gap-1">
+                        <i data-feather="film" class="w-4 h-4"></i>
+                        <span id="animeGenre">Genre</span>
+                    </span>
+                    <span class="px-3 py-1 bg-gray-800 text-gray-300 rounded-full text-sm flex items-center gap-1">
+                        <i data-feather="globe" class="w-4 h-4"></i>
+                        <span id="animeLanguage">Language</span>
+                    </span>
+                    <a href="#" class="px-3 py-1 bg-gray-800 text-gray-300 hover:bg-gray-700 rounded-full text-sm flex items-center gap-1 transition duration-300">
+                        <i data-feather="download" class="w-4 h-4"></i>
+                        <span>Download</span>
+                    </a>
+                </div>
+                
+                <div class="mb-8">
+                    <h3 class="text-lg font-semibold mb-2">Description</h3>
+                    <p id="animeDescription" class="text-gray-300">Loading anime description...</p>
+                </div>
+                
+                <div class="mb-8">
+                    <h3 class="text-lg font-semibold mb-3">Episodes</h3>
+                    <div id="episodesList" class="flex flex-wrap gap-2">
+                        <!-- Episodes will be loaded here -->
+                        <div class="w-12 h-12 bg-gray-800 rounded-lg animate-pulse"></div>
+                        <div class="w-12 h-12 bg-gray-800 rounded-lg animate-pulse"></div>
+                        <div class="w-12 h-12 bg-gray-800 rounded-lg animate-pulse"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-semibold mb-3">Server Selection</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="px-4 py-2 bg-red-600 text-white rounded-lg">Server 1</button>
+                        <button class="px-4 py-2 bg-gray-800 text-gray-300 hover:bg-gray-700 rounded-lg transition duration-300">Server 2</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div>
+                <h3 class="text-lg font-semibold mb-4">Related Anime</h3>
+                <div id="relatedAnime" class="space-y-4">
+                    <!-- Related anime will be loaded here -->
+                    <div class="h-64 bg-gray-800 rounded-xl animate-pulse"></div>
+                    <div class="h-64 bg-gray-800 rounded-xl animate-pulse"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <!-- Footer -->
+    <footer class="bg-gray-800/80 backdrop-blur-sm py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-gray-500 text-sm">&copy; 2025 Senpai Anime. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
