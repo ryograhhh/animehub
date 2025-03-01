@@ -457,7 +457,10 @@
                         
                         ${episode.videoUrl ? `
                             <div class="relative aspect-video bg-black">
-                                <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls></video>
+                                <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls>
+                                    <source src="${episode.videoUrl}" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
                             </div>
                         ` : ''}
                     </div>
@@ -493,7 +496,10 @@
             if (episode.videoUrl) {
                 document.getElementById('episodeVideoPreview').innerHTML = `
                     <div class="relative rounded-lg overflow-hidden">
-                        <video src="${episode.videoUrl}" class="w-full h-auto" controls></video>
+                        <video src="${episode.videoUrl}" class="w-full h-auto" controls>
+                            <source src="${episode.videoUrl}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
                         <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
                             Current video
                         </div>
@@ -603,19 +609,31 @@
             document.getElementById('imageFileName').textContent = file.name;
         }
         
-        // Helper function to handle video file uploads
+        // Helper function to handle video file uploads with improved MP4 support
         function handleVideoUpload(event) {
             const file = event.target.files[0];
             const isEpisodeForm = event.target.id === 'episodeVideoFile';
             
             if (!file) return;
             
-            // Check file type
-            if (!file.type.startsWith('video/')) {
-                showNotification('Please select a video file', 'error');
+            // Check file type - specifically allow MP4
+            if (!file.type.startsWith('video/') && file.type !== 'video/mp4') {
+                showNotification('Please select a video file (MP4 preferred)', 'error');
                 event.target.value = '';
                 return;
             }
+            
+            // Check file size (max 200MB)
+            const maxSize = 200 * 1024 * 1024; // 200MB in bytes
+            if (file.size > maxSize) {
+                showNotification('File size exceeds 200MB limit. Please choose a smaller file.', 'error');
+                event.target.value = '';
+                return;
+            }
+            
+            // Show file size info
+            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            showNotification(`Selected video: ${file.name} (${fileSizeMB}MB)`, 'success');
             
             // Extract episode number from filename
             const fileName = file.name;
@@ -630,16 +648,26 @@
                 }
             }
             
+            // Add loading indicator
+            const previewContainer = isEpisodeForm ? 'episodeVideoPreview' : 'videoPreview';
+            document.getElementById(previewContainer).innerHTML = `
+                <div class="flex justify-center items-center p-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+                    <span class="ml-3 text-gray-300">Processing video (${fileSizeMB}MB)...</span>
+                </div>
+            `;
+            
             // Video preview
             const reader = new FileReader();
             reader.onload = function(e) {
-                const previewContainer = isEpisodeForm ? 'episodeVideoPreview' : 'videoPreview';
-                
                 document.getElementById(previewContainer).innerHTML = `
                     <div class="relative rounded-lg overflow-hidden">
-                        <video src="${e.target.result}" class="w-full h-auto" controls></video>
+                        <video src="${e.target.result}" class="w-full h-auto" controls>
+                            <source src="${e.target.result}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
                         <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                            File: ${file.name}
+                            File: ${file.name} (${fileSizeMB}MB)
                         </div>
                     </div>
                 `;
@@ -648,6 +676,29 @@
                 const urlField = isEpisodeForm ? 'episodeVideoUrl' : 'videoUrl';
                 document.getElementById(urlField).value = e.target.result;
             };
+            
+            // Handle errors
+            reader.onerror = function() {
+                showNotification('Error reading video file. File might be too large or corrupted.', 'error');
+                document.getElementById(previewContainer).innerHTML = '';
+                event.target.value = '';
+            };
+            
+            reader.onprogress = function(event) {
+                if (event.lengthComputable) {
+                    const percentLoaded = Math.round((event.loaded / event.total) * 100);
+                    document.getElementById(previewContainer).innerHTML = `
+                        <div class="flex flex-col justify-center items-center p-8">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mb-4"></div>
+                            <span class="text-gray-300">Processing video: ${percentLoaded}%</span>
+                            <div class="w-full h-2 bg-gray-700 rounded-full mt-3">
+                                <div class="h-full bg-red-500 rounded-full" style="width: ${percentLoaded}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }
+            };
+            
             reader.readAsDataURL(file);
         }
         
@@ -921,8 +972,8 @@
                             <label class="block text-sm font-medium mb-2">Upload Video</label>
                             <label class="flex items-center px-4 py-2 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition duration-300">
                                 <i data-feather="video" class="w-5 h-5 mr-2"></i>
-                                <span>Choose Video</span>
-                                <input type="file" id="episodeVideoFile" accept="video/*" class="hidden">
+                                <span>Choose Video (MP4, max 200MB)</span>
+                                <input type="file" id="episodeVideoFile" accept="video/mp4,video/*" class="hidden">
                             </label>
                             <p class="mt-2 text-xs text-gray-500">
                                 Episode number will be automatically detected from filename if possible (e.g., "Episode 3", "Ep03", "S01E05")
@@ -997,7 +1048,7 @@
     <footer class="bg-gray-800/80 backdrop-blur-sm py-6 mt-12">
         <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
             <p>&copy; 2025 Senpai Anime Admin. All rights reserved.</p>
-            <p class="mt-1">A personal anime collection management system.</p>
+            <p class="mt-1">A personal anime collection website.</p>
         </div>
     </footer>
 </body>
