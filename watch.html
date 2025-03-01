@@ -39,15 +39,6 @@
                 return;
             }
             
-            // Get episodes data
-            const episodes = anime.episodes || [{ 
-                episode: 1, 
-                videoUrl: anime.videoUrl 
-            }];
-            
-            // Find current episode
-            const currentEpisode = episodes.find(ep => ep.episode == episodeNum) || episodes[0];
-            
             // Update view count
             anime.views = (anime.views || 0) + 1;
             localStorage.setItem('animeData', JSON.stringify(animeData));
@@ -65,9 +56,17 @@
             document.getElementById('animeGenre').textContent = anime.genre || 'Unknown';
             document.getElementById('animeLanguage').textContent = anime.language || 'Subtitled';
             
-            // Set video source
+            // Set video source based on the episode
             const videoPlayer = document.getElementById('videoPlayer');
-            const videoUrl = currentEpisode?.videoUrl || anime.videoUrl;
+            let videoUrl = anime.videoUrl;
+            
+            // Check if we have episodes array and the specific episode
+            if (anime.episodes && anime.episodes.length > 0) {
+                const episodeObj = anime.episodes.find(ep => ep.episode == episodeNum);
+                if (episodeObj && episodeObj.videoUrl) {
+                    videoUrl = episodeObj.videoUrl;
+                }
+            }
             
             if (videoUrl) {
                 videoPlayer.innerHTML = `
@@ -99,7 +98,7 @@
             }
             
             // Populate episodes list
-            const totalEpisodes = parseInt(anime.totalEpisodes || anime.currentEpisode || episodes.length || 1);
+            const totalEpisodes = parseInt(anime.totalEpisodes || anime.currentEpisode || 1);
             const episodesList = document.getElementById('episodesList');
             episodesList.innerHTML = '';
             
@@ -127,9 +126,16 @@
             const animeId = getAnimeId();
             
             // Filter anime by genre and exclude current anime
-            const relatedAnime = animeData
-                .filter(a => a.genre === genre && a.id !== animeId)
-                .slice(0, 4);
+            let relatedAnime = animeData.filter(a => a.id !== animeId);
+            
+            // First try to filter by genre, but if no results, just show other anime
+            const genreFiltered = relatedAnime.filter(a => a.genre === genre);
+            if (genreFiltered.length > 0) {
+                relatedAnime = genreFiltered;
+            }
+            
+            // Take only up to 4 items
+            relatedAnime = relatedAnime.slice(0, 4);
                 
             const relatedContainer = document.getElementById('relatedAnime');
             
