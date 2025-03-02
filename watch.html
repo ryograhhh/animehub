@@ -8,6 +8,40 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script>
+        // Initialize IndexedDB
+        let db;
+        const dbName = "senpaiAnimeDB";
+        const dbVersion = 1;
+
+        // Initialize IndexedDB when the page loads
+        function initializeDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(dbName, dbVersion);
+                
+                request.onerror = function(event) {
+                    console.error("IndexedDB error:", event.target.error);
+                    reject(event.target.error);
+                };
+                
+                request.onsuccess = function(event) {
+                    db = event.target.result;
+                    console.log("Database opened successfully");
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = function(event) {
+                    const db = event.target.result;
+                    
+                    // Create a store for video files
+                    if (!db.objectStoreNames.contains('videos')) {
+                        const videoStore = db.createObjectStore('videos', { keyPath: 'id' });
+                        videoStore.createIndex('animeId', 'animeId', { unique: false });
+                        videoStore.createIndex('episode', 'episode', { unique: false });
+                    }
+                };
+            });
+        }
+
         // Get anime ID from URL parameter
         function getAnimeId() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -20,8 +54,8 @@
             return urlParams.get('ep') || '1';
         }
         
-        // Improved loadAnimeDetails function for server-stored videos
-        function loadAnimeDetails() {
+        // Modified loadAnimeDetails function to handle IndexedDB references
+        async function loadAnimeDetails() {
             const animeId = getAnimeId();
             const episodeNum = getEpisodeNumber();
             
@@ -56,15 +90,134 @@
             document.getElementById('animeGenre').textContent = anime.genre || 'Unknown';
             document.getElementById('animeLanguage').textContent = anime.language || 'Subtitled';
             
+            // Initialize DB if needed
+            if (!db) {
+                try {
+                    await initializeDB();
+                } catch (error) {
+                    console.error("Failed to initialize database:", error);
+                }
+            }
+            
             // Set video source based on the episode
             const videoPlayer = document.getElementById('videoPlayer');
             let videoUrl = null;
+            let isSpecialReference = false;
             
             // Find the episode in the episodes array
             if (anime.episodes && anime.episodes.length > 0) {
                 const episode = anime.episodes.find(ep => ep.episode == episodeNum);
                 if (episode && episode.videoUrl) {
                     videoUrl = episode.videoUrl;
+                    
+                    // Check if it's a reference to IndexedDB storage
+                    try {
+                        if (videoUrl.startsWith('{') && videoUrl.includes('type')) {
+                            const refData = JSON.parse(videoUrl);
+                            
+                            // Handle IndexedDB reference
+                            if (refData.type === "indexedDB" && refData.videoId && db) {
+                                isSpecialReference = true;
+                                
+                                try {
+                                    // Try to get the video from IndexedDB
+                                    const transaction = db.transaction(['videos'], 'readonly');
+                                    const videoStore = transaction.objectStore('videos');
+                                    const request = videoStore.get(refData.videoId);
+                                    
+                                    request.onsuccess = function(event) {
+                                        const videoData = event.target.result;
+                                        if (videoData && videoData.data) {
+                                            // Found the video in IndexedDB - create a blob from the stored data
+                                            const blob = new Blob([videoData.data], { type: videoData.type || 'video/mp4' });
+                                            const url = URL.createObjectURL(blob);
+                                            
+                                            // Show the video
+                                            videoPlayer.innerHTML = `
+                                                <video class="w-full h-full" controls autoplay>
+                                                    <source src="${url}" type="${videoData.type || 'video/mp4'}">
+                                                    Your browser does not support the video tag.
+                                                </video>
+                                            `;
+                                            
+                                            // Set up video progress tracking
+                                            const videoElement = videoPlayer.querySelector('video');
+                                            if (videoElement) {
+                                                videoElement.addEventListener('timeupdate', function() {
+                                                    const progress = (this.currentTime / this.duration) * 100;
+                                                    if (progress > 0 && this.duration > 0) {
+                                                        addToWatchHistory(getAnimeId(), getEpisodeNumber(), progress);
+                                                    }
+                                                });
+                                            }
+                                        } else {
+                                            // Video not found in database
+                                            videoPlayer.innerHTML = `
+                                                <div class="w-full h-full flex items-center justify-center bg-gray-800">
+                                                    <div class="text-center p-8">
+                                                        <i data-feather="database" class="w-16 h-16 text-gray-400 mb-4 mx-auto"></i>
+                                                        <p class="text-gray-300">This video file (${refData.fileName || 'Unknown'}) is stored in the database but could not be found.</p>
+                                                        <p class="text-gray-400 mt-4">The file might have been deleted or the database was cleared.</p>
+                                                        <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                                                            Go to Admin Panel
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            `;
+                                            feather.replace();
+                                        }
+                                    };
+                                    
+                                    request.onerror = function(event) {
+                                        console.error("Error retrieving video from IndexedDB:", event.target.error);
+                                        videoPlayer.innerHTML = `
+                                            <div class="w-full h-full flex items-center justify-center bg-gray-800">
+                                                <div class="text-center p-8">
+                                                    <i data-feather="alert-triangle" class="w-16 h-16 text-red-500 mb-4 mx-auto"></i>
+                                                    <p class="text-gray-300">Error retrieving video from database.</p>
+                                                    <p class="text-gray-400 mt-2">The file might be corrupted or the database is not accessible.</p>
+                                                </div>
+                                            </div>
+                                        `;
+                                        feather.replace();
+                                    };
+                                } catch (error) {
+                                    console.error("Error processing IndexedDB reference:", error);
+                                    videoPlayer.innerHTML = `
+                                        <div class="w-full h-full flex items-center justify-center bg-gray-800">
+                                            <div class="text-center p-8">
+                                                <i data-feather="alert-circle" class="w-16 h-16 text-red-500 mb-4 mx-auto"></i>
+                                                <p class="text-gray-300">Error accessing the database.</p>
+                                                <p class="text-gray-400 mt-2">${error.message || 'Unknown error'}</p>
+                                            </div>
+                                        </div>
+                                    `;
+                                    feather.replace();
+                                }
+                            }
+                            // Legacy object URL reference (won't work across sessions)
+                            else if (refData.objectUrl) {
+                                isSpecialReference = true;
+                                videoPlayer.innerHTML = `
+                                    <div class="w-full h-full flex items-center justify-center bg-gray-800">
+                                        <div class="text-center p-8">
+                                            <i data-feather="film" class="w-16 h-16 text-gray-400 mb-4 mx-auto"></i>
+                                            <p class="text-gray-300">This video is a large file (${(refData.size / (1024 * 1024)).toFixed(2)}MB)</p>
+                                            <p class="text-gray-400 mt-2">File: ${refData.name}</p>
+                                            <p class="text-gray-500 mt-4">Large files are only available in the browser session they were uploaded in.</p>
+                                            <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                                                Go to Admin Panel
+                                            </a>
+                                        </div>
+                                    </div>
+                                `;
+                                feather.replace();
+                            }
+                        }
+                    } catch (e) {
+                        // Not a JSON reference, treat as regular URL
+                        console.error("Error parsing video reference:", e);
+                    }
                 }
             }
             
@@ -73,38 +226,15 @@
                 videoUrl = anime.videoUrl;
             }
             
-            if (videoUrl) {
-                if (videoUrl.startsWith('/uploads/')) {
-                    // Server-stored video
-                    videoPlayer.innerHTML = `
-                        <video class="w-full h-full" controls autoplay>
-                            <source src="${videoUrl}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                    `;
-                } else if (videoUrl.startsWith('{')) {
-                    // Legacy file reference from old sessions (won't work)
-                    videoPlayer.innerHTML = `
-                        <div class="w-full h-full flex items-center justify-center bg-gray-800">
-                            <div class="text-center p-8">
-                                <i data-feather="alert-triangle" class="w-16 h-16 text-yellow-400 mb-4 mx-auto"></i>
-                                <p class="text-gray-300">This video was uploaded using an older version.</p>
-                                <p class="text-gray-400 mt-2">Please re-upload this episode in the admin panel.</p>
-                                <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                                    Go to Admin Panel
-                                </a>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    // External URL
-                    videoPlayer.innerHTML = `
-                        <video class="w-full h-full" controls autoplay>
-                            <source src="${videoUrl}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                    `;
-                }
+            // If we have a URL and it's not a special reference already handled
+            if (videoUrl && !isSpecialReference) {
+                // Regular video URL
+                videoPlayer.innerHTML = `
+                    <video class="w-full h-full" controls autoplay>
+                        <source src="${videoUrl}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                `;
                 
                 // Set up video progress tracking once video element is created
                 const videoElement = videoPlayer.querySelector('video');
@@ -115,33 +245,14 @@
                             addToWatchHistory(getAnimeId(), getEpisodeNumber(), progress);
                         }
                     });
-                    
-                    // Add error handler for video loading failures
-                    videoElement.addEventListener('error', function() {
-                        videoPlayer.innerHTML = `
-                            <div class="w-full h-full flex items-center justify-center bg-gray-800">
-                                <div class="text-center p-8">
-                                    <i data-feather="alert-circle" class="w-16 h-16 text-red-400 mb-4 mx-auto"></i>
-                                    <p class="text-gray-300">Error loading the video.</p>
-                                    <p class="text-gray-400 mt-2">The file may have been moved or deleted.</p>
-                                    <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                                        Go to Admin Panel
-                                    </a>
-                                </div>
-                            </div>
-                        `;
-                        feather.replace();
-                    });
                 }
-            } else {
+            } else if (!isSpecialReference) {
+                // No video available
                 videoPlayer.innerHTML = `
                     <div class="w-full h-full flex items-center justify-center bg-gray-800">
                         <div class="text-center p-8">
                             <i data-feather="film" class="w-16 h-16 text-gray-400 mb-4 mx-auto"></i>
                             <p class="text-gray-300">No video available for this episode.</p>
-                            <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                                Upload Video
-                            </a>
                         </div>
                     </div>
                 `;
@@ -407,7 +518,7 @@
                         <span>Download</span>
                     </a>
                 </div>
-                
+
                 <div class="mb-8">
                     <h3 class="text-lg font-semibold mb-2">Description</h3>
                     <p id="animeDescription" class="text-gray-300">Loading anime description...</p>
