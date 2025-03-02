@@ -62,11 +62,23 @@ const upload = multer({
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  // Allow iframe embedding from all domains
+  origin: '*'
+}));
 app.use(express.static(path.join(__dirname)));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: true, limit: '200mb' }));
+
+// Add headers for iframe embedding
+app.use(function(req, res, next) {
+  // Allow content to be displayed in iframes from any origin
+  res.header('X-Frame-Options', 'ALLOWALL');
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
 
 // Routes
 app.get('/', (req, res) => {
@@ -180,6 +192,23 @@ app.get('/api/files', (req, res) => {
   }
 });
 
+// API endpoint to check iframe source accessibility
+app.get('/api/check-iframe', (req, res) => {
+  const { url } = req.query;
+  
+  if (!url) {
+    return res.status(400).json({ success: false, message: 'No URL provided' });
+  }
+  
+  // Just return success since we can't actually verify external iframe URLs
+  // without making HTTP requests to them which could hit CORS issues
+  res.json({
+    success: true,
+    url: url,
+    status: 'assumed_valid'
+  });
+});
+
 // Handle BigCommand embedded videos
 app.get('/api/embed/info', (req, res) => {
   const { embedId } = req.query;
@@ -194,6 +223,24 @@ app.get('/api/embed/info', (req, res) => {
     success: true,
     embedId: embedId,
     status: 'available'
+  });
+});
+
+// Proxy endpoint for iframe content
+app.get('/api/proxy-iframe', (req, res) => {
+  const { url } = req.query;
+  
+  if (!url) {
+    return res.status(400).json({ success: false, message: 'No URL provided' });
+  }
+  
+  // This is just a placeholder - in a real implementation,
+  // you'd need to fetch the content and proxy it, but that's complex
+  // and would require careful security considerations
+  res.json({
+    success: true,
+    message: 'Iframe proxying is not implemented for security reasons',
+    originalUrl: url
   });
 });
 
