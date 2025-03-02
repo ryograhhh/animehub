@@ -219,33 +219,73 @@
             }
         }
         
-        // Function to detect embed code and extract information
+        // Function to extract iframe src from embed code
+        function extractIframeSrc(embedCode) {
+            const srcMatch = embedCode.match(/src\s*=\s*["']([^"']+)["']/i);
+            return srcMatch ? srcMatch[1] : null;
+        }
+        
+        // Function to detect embed code
         function detectEmbedCode(code) {
-            // Check if it's a BigCommand embed
-            if (code.includes('bigcommand.com') && code.includes('motion_popover')) {
-                try {
-                    // Try to extract data-id
-                    const dataIdMatch = code.match(/data-id=['"](.*?)['"]/);
-                    const dataId = dataIdMatch ? dataIdMatch[1] : null;
-                    
-                    // Extract other information if available
-                    const typeMatch = code.match(/data-type=['"](.*?)['"]/);
-                    const type = typeMatch ? typeMatch[1] : 'thumbnail';
-                    
-                    if (dataId) {
-                        return {
-                            type: 'bigcommand',
-                            dataId: dataId,
-                            displayType: type,
-                            embedCode: code
-                        };
-                    }
-                } catch (e) {
-                    console.error("Error parsing embed code:", e);
+            // Check if it's an iframe embed
+            if (code.includes('<iframe') && code.includes('</iframe>')) {
+                const iframeSrc = extractIframeSrc(code);
+                
+                return {
+                    type: 'embed',
+                    provider: 'iframe',
+                    iframeSrc: iframeSrc,
+                    embedCode: code
+                };
+            }
+            
+            // Check if it's a direct BigCommand URL
+            if (code.includes('adilo.bigcommand.com/watch/')) {
+                // Extract the ID
+                const idMatch = code.match(/watch\/([^/\s"']+)/);
+                const dataId = idMatch ? idMatch[1] : null;
+                
+                if (dataId) {
+                    return {
+                        type: 'embed',
+                        provider: 'bigcommand',
+                        dataId: dataId,
+                        iframeSrc: `https://adilo.bigcommand.com/watch/${dataId}`,
+                        embedCode: code
+                    };
                 }
             }
             
-            // Handle other embed types if needed
+            // Check if it's a BigCommand embed
+            if (code.includes('bigcommand.com') && (code.includes('motion_popover') || code.includes('iframe'))) {
+                // Try to extract data-id
+                const dataIdMatch = code.match(/data-id=['"](.*?)['"]/);
+                const dataId = dataIdMatch ? dataIdMatch[1] : null;
+                
+                // Or try from src if it's an iframe
+                if (!dataId && code.includes('iframe')) {
+                    const srcMatch = code.match(/src\s*=\s*["'].*?bigcommand\.com\/watch\/([^"'/]+)["']/i);
+                    if (srcMatch && srcMatch[1]) {
+                        return {
+                            type: 'embed',
+                            provider: 'bigcommand',
+                            dataId: srcMatch[1],
+                            iframeSrc: `https://adilo.bigcommand.com/watch/${srcMatch[1]}`,
+                            embedCode: code
+                        };
+                    }
+                }
+                
+                if (dataId) {
+                    return {
+                        type: 'embed',
+                        provider: 'bigcommand',
+                        dataId: dataId,
+                        iframeSrc: `https://adilo.bigcommand.com/watch/${dataId}`,
+                        embedCode: code
+                    };
+                }
+            }
             
             // Return null if no valid embed detected
             return null;
@@ -329,14 +369,7 @@
             let videoData = null;
             
             if (embedInfo) {
-                videoData = {
-                    type: 'embed',
-                    provider: embedInfo.type,
-                    dataId: embedInfo.dataId,
-                    displayType: embedInfo.displayType,
-                    embedCode: embedInfo.embedCode
-                };
-                
+                videoData = embedInfo;
                 // For embed codes, we store the embed information
                 videoUrl = JSON.stringify(videoData);
             } else if (videoUrl === "FILE_UPLOAD_REFERENCE" && window.uploadedVideoFile) {
@@ -508,7 +541,17 @@
                         // This is an embed
                         videoType = 'embed';
                         
-                        if (videoData.provider === 'bigcommand') {
+                        if (videoData.provider === 'iframe') {
+                            videoPreview = `
+                                <div class="relative aspect-video bg-gray-800 flex items-center justify-center">
+                                    <div class="text-center p-4">
+                                        <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                        <p class="text-gray-400">Iframe Embed</p>
+                                        ${videoData.iframeSrc ? `<p class="text-sm text-gray-500">Source: ${videoData.iframeSrc}</p>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        } else if (videoData.provider === 'bigcommand') {
                             videoPreview = `
                                 <div class="relative aspect-video bg-gray-800 flex items-center justify-center">
                                     <div class="text-center p-4">
@@ -535,15 +578,27 @@
                         `;
                     }
                 } catch (e) {
-                    // Not JSON, treat as regular URL
-                    videoPreview = `
-                        <div class="relative aspect-video bg-black">
-                            <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls>
-                                <source src="${episode.videoUrl}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video>
-                        </div>
-                    `;
+                    // Check if it looks like an iframe embed
+                    if (episode.videoUrl.includes('<iframe') && episode.videoUrl.includes('</iframe>')) {
+                        videoPreview = `
+                            <div class="relative aspect-video bg-gray-800 flex items-center justify-center">
+                                <div class="text-center p-4">
+                                    <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                    <p class="text-gray-400">Iframe Embed</p>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Not JSON, treat as regular URL
+                        videoPreview = `
+                            <div class="relative aspect-video bg-black">
+                                <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls>
+                                    <source src="${episode.videoUrl}" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                        `;
+                    }
                 }
                 
                 episodeHTML += `
@@ -615,9 +670,24 @@
                 
                 if (videoData.type === 'embed') {
                     // It's an embed
-                    document.getElementById('episodeVideoUrl').value = videoData.embedCode;
+                    document.getElementById('episodeVideoUrl').value = videoData.embedCode || videoData.iframeSrc || '';
                     
-                    if (videoData.provider === 'bigcommand') {
+                    if (videoData.provider === 'iframe') {
+                        previewContent = `
+                            <div class="relative rounded-lg overflow-hidden">
+                                <div class="aspect-video bg-gray-800 flex items-center justify-center">
+                                    <div class="text-center p-4">
+                                        <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                        <p class="text-gray-400">Iframe Embed</p>
+                                        ${videoData.iframeSrc ? `<p class="text-sm text-gray-500">Source: ${videoData.iframeSrc}</p>` : ''}
+                                    </div>
+                                </div>
+                                <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                    Current embed
+                                </div>
+                            </div>
+                        `;
+                    } else if (videoData.provider === 'bigcommand') {
                         previewContent = `
                             <div class="relative rounded-lg overflow-hidden">
                                 <div class="aspect-video bg-gray-800 flex items-center justify-center">
@@ -654,20 +724,39 @@
                     `;
                 }
             } catch (e) {
-                // Regular URL
-                document.getElementById('episodeVideoUrl').value = episode.videoUrl;
-                
-                previewContent = `
-                    <div class="relative rounded-lg overflow-hidden">
-                        <video src="${episode.videoUrl}" class="w-full h-auto" controls>
-                            <source src="${episode.videoUrl}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                        <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                            Current video
+                // Check if it's an iframe embed
+                if (episode.videoUrl.includes('<iframe') && episode.videoUrl.includes('</iframe>')) {
+                    document.getElementById('episodeVideoUrl').value = episode.videoUrl;
+                    
+                    previewContent = `
+                        <div class="relative rounded-lg overflow-hidden">
+                            <div class="aspect-video bg-gray-800 flex items-center justify-center">
+                                <div class="text-center p-4">
+                                    <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                    <p class="text-gray-400">Iframe Embed</p>
+                                </div>
+                            </div>
+                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                Current embed
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    // Regular URL
+                    document.getElementById('episodeVideoUrl').value = episode.videoUrl;
+                    
+                    previewContent = `
+                        <div class="relative rounded-lg overflow-hidden">
+                            <video src="${episode.videoUrl}" class="w-full h-auto" controls>
+                                <source src="${episode.videoUrl}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                Current video
+                            </div>
+                        </div>
+                    `;
+                }
             }
             
             document.getElementById('episodeVideoPreview').innerHTML = previewContent;
@@ -724,8 +813,8 @@
                 showNotification('Anime deleted successfully!');
             }
         }
-        
-        // Function to show notification
+
+             // Function to show notification
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
             notification.className = `fixed top-6 right-6 px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 z-50 ${
@@ -863,8 +952,8 @@
             setTimeout(() => {
                 const content = videoUrlField.value;
                 
-                // Check if it looks like an embed code
-                if (content.includes('<script') || content.includes('<div') || content.includes('iframe')) {
+                // Check if it looks like an embed code or iframe
+                if (content.includes('<iframe') || content.includes('bigcommand.com')) {
                     // Try to detect embed type
                     const embedInfo = detectEmbedCode(content);
                     
@@ -872,7 +961,19 @@
                         // Show a preview of the embed
                         let previewHtml = '';
                         
-                        if (embedInfo.type === 'bigcommand') {
+                        if (embedInfo.provider === 'iframe') {
+                            previewHtml = `
+                                <div class="relative rounded-lg overflow-hidden">
+                                    <div class="aspect-video bg-gray-800 flex items-center justify-center">
+                                        <div class="text-center p-4">
+                                            <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                            <p class="text-gray-300">Iframe Embed Detected</p>
+                                            ${embedInfo.iframeSrc ? `<p class="text-gray-400 mt-2">Source: ${embedInfo.iframeSrc}</p>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        } else if (embedInfo.provider === 'bigcommand') {
                             previewHtml = `
                                 <div class="relative rounded-lg overflow-hidden">
                                     <div class="aspect-video bg-gray-800 flex items-center justify-center">
@@ -1164,11 +1265,11 @@
                             <div class="relative">
                                 <textarea id="episodeVideoUrl" rows="3" required
                                       class="w-full px-4 py-2 pl-10 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600"
-                                      placeholder="Enter URL, paste embed code (BigCommand), or upload a video file"></textarea>
+                                      placeholder="Enter URL, paste iframe embed code, or upload a video file"></textarea>
                                 <i data-feather="code" class="absolute left-3 top-3 text-gray-400 w-4 h-4"></i>
                             </div>
                             <p class="mt-2 text-xs text-gray-500">
-                                Paste a BigCommand embed code, enter a direct video URL, or upload a video file below
+                                Paste an iframe embed code, enter a direct video URL, or upload a video file below
                             </p>
                         </div>
                         
