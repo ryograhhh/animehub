@@ -20,7 +20,7 @@
             return urlParams.get('ep') || '1';
         }
         
-        // Modified loadAnimeDetails function to handle file references in video URLs
+        // Improved loadAnimeDetails function for server-stored videos
         function loadAnimeDetails() {
             const animeId = getAnimeId();
             const episodeNum = getEpisodeNumber();
@@ -59,24 +59,12 @@
             // Set video source based on the episode
             const videoPlayer = document.getElementById('videoPlayer');
             let videoUrl = null;
-            let isLargeFile = false;
-            let fileInfo = null;
             
             // Find the episode in the episodes array
             if (anime.episodes && anime.episodes.length > 0) {
                 const episode = anime.episodes.find(ep => ep.episode == episodeNum);
                 if (episode && episode.videoUrl) {
                     videoUrl = episode.videoUrl;
-                    
-                    // Check if it's a file reference (JSON string)
-                    try {
-                        if (videoUrl.startsWith('{') && videoUrl.includes('objectUrl')) {
-                            fileInfo = JSON.parse(videoUrl);
-                            isLargeFile = true;
-                        }
-                    } catch (e) {
-                        // Not a JSON string, treat as regular URL
-                    }
                 }
             }
             
@@ -86,15 +74,22 @@
             }
             
             if (videoUrl) {
-                if (isLargeFile && fileInfo) {
-                    // Handle large file reference
+                if (videoUrl.startsWith('/uploads/')) {
+                    // Server-stored video
+                    videoPlayer.innerHTML = `
+                        <video class="w-full h-full" controls autoplay>
+                            <source src="${videoUrl}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    `;
+                } else if (videoUrl.startsWith('{')) {
+                    // Legacy file reference from old sessions (won't work)
                     videoPlayer.innerHTML = `
                         <div class="w-full h-full flex items-center justify-center bg-gray-800">
                             <div class="text-center p-8">
-                                <i data-feather="film" class="w-16 h-16 text-gray-400 mb-4 mx-auto"></i>
-                                <p class="text-gray-300">This video is a large file (${(fileInfo.size / (1024 * 1024)).toFixed(2)}MB)</p>
-                                <p class="text-gray-400 mt-2">File: ${fileInfo.name}</p>
-                                <p class="text-gray-500 mt-4">Large files are only available in the browser session they were uploaded in.</p>
+                                <i data-feather="alert-triangle" class="w-16 h-16 text-yellow-400 mb-4 mx-auto"></i>
+                                <p class="text-gray-300">This video was uploaded using an older version.</p>
+                                <p class="text-gray-400 mt-2">Please re-upload this episode in the admin panel.</p>
                                 <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
                                     Go to Admin Panel
                                 </a>
@@ -102,24 +97,41 @@
                         </div>
                     `;
                 } else {
-                    // Regular video URL
+                    // External URL
                     videoPlayer.innerHTML = `
                         <video class="w-full h-full" controls autoplay>
                             <source src="${videoUrl}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
                     `;
+                }
+                
+                // Set up video progress tracking once video element is created
+                const videoElement = videoPlayer.querySelector('video');
+                if (videoElement) {
+                    videoElement.addEventListener('timeupdate', function() {
+                        const progress = (this.currentTime / this.duration) * 100;
+                        if (progress > 0 && this.duration > 0) {
+                            addToWatchHistory(getAnimeId(), getEpisodeNumber(), progress);
+                        }
+                    });
                     
-                    // Set up video progress tracking once video element is created
-                    const videoElement = videoPlayer.querySelector('video');
-                    if (videoElement) {
-                        videoElement.addEventListener('timeupdate', function() {
-                            const progress = (this.currentTime / this.duration) * 100;
-                            if (progress > 0 && this.duration > 0) {
-                                addToWatchHistory(getAnimeId(), getEpisodeNumber(), progress);
-                            }
-                        });
-                    }
+                    // Add error handler for video loading failures
+                    videoElement.addEventListener('error', function() {
+                        videoPlayer.innerHTML = `
+                            <div class="w-full h-full flex items-center justify-center bg-gray-800">
+                                <div class="text-center p-8">
+                                    <i data-feather="alert-circle" class="w-16 h-16 text-red-400 mb-4 mx-auto"></i>
+                                    <p class="text-gray-300">Error loading the video.</p>
+                                    <p class="text-gray-400 mt-2">The file may have been moved or deleted.</p>
+                                    <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                                        Go to Admin Panel
+                                    </a>
+                                </div>
+                            </div>
+                        `;
+                        feather.replace();
+                    });
                 }
             } else {
                 videoPlayer.innerHTML = `
@@ -127,6 +139,9 @@
                         <div class="text-center p-8">
                             <i data-feather="film" class="w-16 h-16 text-gray-400 mb-4 mx-auto"></i>
                             <p class="text-gray-300">No video available for this episode.</p>
+                            <a href="admin.html" class="mt-4 inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                                Upload Video
+                            </a>
                         </div>
                     </div>
                 `;
