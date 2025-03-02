@@ -225,7 +225,7 @@
             }
         }
         
-        // Function to handle video file uploads with server-side storage
+        // Function to handle video file uploads with server-side storage and improved error handling
         function handleVideoUpload(event) {
             const file = event.target.files[0];
             const isEpisodeForm = event.target.id === 'episodeVideoFile';
@@ -275,16 +275,18 @@
             
             // Create form data for upload
             const formData = new FormData();
-            formData.append('video', file);
+            formData.append('file', file); // Changed from 'video' to 'file' to match server expectation
             
-            // Upload the file to the server
+            // Upload the file to the server with improved error handling
             fetch('/api/upload/video', {
                 method: 'POST',
                 body: formData
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
+                    return response.json().then(errorData => {
+                        throw new Error(errorData.message || `Server error: ${response.status}`);
+                    });
                 }
                 return response.json();
             })
@@ -746,7 +748,7 @@
             }, 3000);
         }
         
-        // Helper function to handle thumbnail file uploads
+        // Helper function to handle thumbnail file uploads with better error handling
         function handleThumbnailUpload(event) {
             const file = event.target.files[0];
             
@@ -761,19 +763,23 @@
             
             // Show loading indicator
             document.getElementById('imageFileName').textContent = `Uploading ${file.name}...`;
+            document.getElementById('thumbnailPreview').style.backgroundImage = '';
+            document.getElementById('thumbnailPreview').classList.add('hidden');
             
             // Create form data for upload
             const formData = new FormData();
-            formData.append('image', file);
+            formData.append('file', file); // Changed from 'image' to 'file' to match server expectation
             
-            // Upload to server
+            // Upload to server with better error handling
             fetch('/api/upload/image', {
                 method: 'POST',
                 body: formData
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
+                    return response.json().then(errorData => {
+                        throw new Error(errorData.message || `Server error: ${response.status}`);
+                    });
                 }
                 return response.json();
             })
@@ -982,7 +988,7 @@
                                 <option value="Raw">Raw (No Subtitles)</option>
                             </select>
                         </div>
-                        
+                         
                         <div>
                             <label for="thumbnail" class="block text-sm font-medium mb-2">Thumbnail URL</label>
                             <div class="relative">
