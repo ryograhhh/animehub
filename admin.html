@@ -85,15 +85,9 @@
                         </td>
                         <td class="px-6 py-4">${new Date(anime.dateAdded).toLocaleDateString()}</td>
                         <td class="px-6 py-4">
-                            ${anime.videoUrl ? `
-                                <span class="px-2 py-1 bg-green-900/50 text-green-300 rounded-md text-xs">
-                                    <i data-feather="check" class="w-3 h-3 mr-1 inline"></i> Available
-                                </span>
-                            ` : `
-                                <span class="px-2 py-1 bg-gray-700 text-gray-400 rounded-md text-xs">
-                                    <i data-feather="x" class="w-3 h-3 mr-1 inline"></i> None
-                                </span>
-                            `}
+                            <span class="px-2 py-1 bg-green-900/50 text-green-300 rounded-md text-xs">
+                                <i data-feather="check" class="w-3 h-3 mr-1 inline"></i> Available
+                            </span>
                         </td>
                         <td class="px-6 py-4">
                             <div class="flex gap-2">
@@ -225,91 +219,39 @@
             }
         }
         
-        // ======== FIXED VIDEO UPLOAD FUNCTION ========
-        function handleVideoUpload(event) {
-            const file = event.target.files[0];
-            const isEpisodeForm = event.target.id === 'episodeVideoFile';
-            
-            if (!file) return;
-            
-            // Check file type - specifically allow MP4
-            if (!file.type.startsWith('video/') && file.type !== 'video/mp4') {
-                showNotification('Please select a video file (MP4 preferred)', 'error');
-                event.target.value = '';
-                return;
-            }
-            
-            // Check file size (max 200MB)
-            const maxSize = 200 * 1024 * 1024; // 200MB in bytes
-            if (file.size > maxSize) {
-                showNotification('File size exceeds 200MB limit. Please choose a smaller file.', 'error');
-                event.target.value = '';
-                return;
-            }
-            
-            // Show file size info
-            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-            showNotification(`Selected video: ${file.name} (${fileSizeMB}MB)`, 'success');
-            
-            // Extract episode number from filename
-            const fileName = file.name;
-            const episodeMatch = fileName.match(/[Ee]pisode\s*(\d+)|[Ee]p\s*(\d+)|[Ee]\s*(\d+)|S\d+E(\d+)/);
-            
-            if (episodeMatch && isEpisodeForm) {
-                // Find the first capture group that's not undefined and is a number
-                const extractedEp = episodeMatch.slice(1).find(match => match && !isNaN(match));
-                if (extractedEp) {
-                    document.getElementById('episodeNumber').value = extractedEp;
-                    showNotification(`Episode ${extractedEp} detected from filename!`);
+        // Function to detect embed code and extract information
+        function detectEmbedCode(code) {
+            // Check if it's a BigCommand embed
+            if (code.includes('bigcommand.com') && code.includes('motion_popover')) {
+                try {
+                    // Try to extract data-id
+                    const dataIdMatch = code.match(/data-id=['"](.*?)['"]/);
+                    const dataId = dataIdMatch ? dataIdMatch[1] : null;
+                    
+                    // Extract other information if available
+                    const typeMatch = code.match(/data-type=['"](.*?)['"]/);
+                    const type = typeMatch ? typeMatch[1] : 'thumbnail';
+                    
+                    if (dataId) {
+                        return {
+                            type: 'bigcommand',
+                            dataId: dataId,
+                            displayType: type,
+                            embedCode: code
+                        };
+                    }
+                } catch (e) {
+                    console.error("Error parsing embed code:", e);
                 }
             }
             
-            // Add loading indicator
-            const previewContainer = isEpisodeForm ? 'episodeVideoPreview' : 'videoPreview';
-            document.getElementById(previewContainer).innerHTML = `
-                <div class="flex justify-center items-center p-8">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
-                    <span class="ml-3 text-gray-300">Processing video (${fileSizeMB}MB)...</span>
-                </div>
-            `;
-
-            try {
-                // Create URL for preview
-                const videoUrl = URL.createObjectURL(file);
-                
-                // Display the video preview using the object URL
-                document.getElementById(previewContainer).innerHTML = `
-                    <div class="relative rounded-lg overflow-hidden">
-                        <video src="${videoUrl}" class="w-full h-auto" controls>
-                            <source src="${videoUrl}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                        <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                            File: ${file.name} (${fileSizeMB}MB)
-                        </div>
-                    </div>
-                `;
-                
-                // For the form submission
-                const urlField = isEpisodeForm ? 'episodeVideoUrl' : 'videoUrl';
-                
-                // Store the File object reference
-                window.uploadedVideoFile = file;
-                // Also store the blob URL for direct access
-                window.uploadedVideoBlobUrl = videoUrl;
-                
-                document.getElementById(urlField).value = "FILE_UPLOAD_REFERENCE"; // Special marker
-                document.getElementById(urlField).dataset.fileReference = true;
-                
-            } catch (error) {
-                console.error("Error processing video file:", error);
-                showNotification('Error processing video file. Try a smaller file or different format.', 'error');
-                document.getElementById(previewContainer).innerHTML = '';
-                event.target.value = '';
-            }
+            // Handle other embed types if needed
+            
+            // Return null if no valid embed detected
+            return null;
         }
-
-        // ======== FIXED EPISODE FORM SUBMISSION ========
+        
+        // Function to handle episode form submission
         function handleEpisodeFormSubmit(event) {
             event.preventDefault();
             
@@ -343,174 +285,123 @@
             }
             
             if (!videoUrl) {
-                alert('Please enter a video URL or upload a video');
+                alert('Please enter a video URL, upload a video, or paste an embed code');
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalBtnText;
                 feather.replace();
                 return;
             }
             
-            try {
-                // Handle file upload case
-                if (videoUrl === "FILE_UPLOAD_REFERENCE" && window.uploadedVideoFile) {
-                    const file = window.uploadedVideoFile;
-                    
-                    // Use the blob URL directly - simplest approach
-                    // NOTE: This will work in the current browser session
-                    if (window.uploadedVideoBlobUrl) {
-                        const blobUrl = window.uploadedVideoBlobUrl;
-                        
-                        // Store file info for reference
-                        const fileInfo = {
-                            name: file.name,
-                            size: file.size,
-                            type: file.type || 'video/mp4',
-                            blobUrl: true,
-                            uploadTime: new Date().toISOString()
-                        };
-                        
-                        finishSubmission(animeId, episodeNumber, episodeTitle, blobUrl, fileInfo);
-                        return;
-                    }
-                    // Fallback to direct data URL for small files
-                    else if (file.size < 30 * 1024 * 1024) { // Less than 30MB
-                        submitBtn.innerHTML = `<i data-feather="loader" class="w-5 h-5 animate-spin mr-2"></i> Converting video...`;
-                        feather.replace();
-                        
-                        // Create data URL
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            // Success! Use the data URL directly
-                            finishSubmission(animeId, episodeNumber, episodeTitle, e.target.result);
-                        };
-                        reader.onerror = function(error) {
-                            console.error("Error reading file:", error);
-                            showNotification('Error reading video file: ' + error.message, 'error');
-                            submitBtn.disabled = false;
-                            submitBtn.innerHTML = originalBtnText;
-                            feather.replace();
-                        };
-                        reader.readAsDataURL(file);
-                        return;
-                    }
-                    // Last resort fallback - try to create a blob URL again
-                    else {
-                        try {
-                            const blobUrl = URL.createObjectURL(file);
-                            const fileInfo = {
-                                name: file.name,
-                                size: file.size,
-                                type: file.type || 'video/mp4',
-                                blobUrl: true,
-                                fallback: true,
-                                uploadTime: new Date().toISOString()
-                            };
-                            finishSubmission(animeId, episodeNumber, episodeTitle, blobUrl, fileInfo);
-                            return;
-                        } catch (error) {
-                            showNotification('Error creating video URL: ' + error.message, 'error');
-                            submitBtn.disabled = false;
-                            submitBtn.innerHTML = originalBtnText;
-                            feather.replace();
-                            return;
-                        }
-                    }
-                } else {
-                    // Regular URL was provided
-                    finishSubmission(animeId, episodeNumber, episodeTitle, videoUrl);
-                }
-            } catch (error) {
-                console.error("Error in episode submission:", error);
-                showNotification("An error occurred while processing your video: " + error.message, "error");
+            // Get existing data
+            let animeData = JSON.parse(localStorage.getItem('animeData')) || [];
+            const anime = animeData.find(a => a.id === animeId);
+            
+            if (!anime) {
+                alert('Selected anime not found');
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalBtnText;
                 feather.replace();
+                return;
             }
             
-            function finishSubmission(animeId, episodeNumber, episodeTitle, videoUrl, fileInfo = null) {
-                // Get existing data
-                let animeData = JSON.parse(localStorage.getItem('animeData')) || [];
-                const anime = animeData.find(a => a.id === animeId);
-                
-                if (!anime) {
-                    alert('Selected anime not found');
+            // Initialize episodes array if it doesn't exist
+            if (!anime.episodes) {
+                anime.episodes = [];
+            }
+            
+            // Check if this episode number already exists
+            const episodeExists = anime.episodes.some(ep => ep.episode == episodeNumber);
+            if (episodeExists) {
+                const confirmReplace = confirm(`Episode ${episodeNumber} already exists. Do you want to replace it?`);
+                if (confirmReplace) {
+                    // Remove existing episode
+                    anime.episodes = anime.episodes.filter(ep => ep.episode != episodeNumber);
+                } else {
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = originalBtnText;
                     feather.replace();
                     return;
                 }
-                
-                // Initialize episodes array if it doesn't exist
-                if (!anime.episodes) {
-                    anime.episodes = [];
-                }
-                
-                // Check if this episode number already exists
-                const episodeExists = anime.episodes.some(ep => ep.episode == episodeNumber);
-                if (episodeExists) {
-                    const confirmReplace = confirm(`Episode ${episodeNumber} already exists. Do you want to replace it?`);
-                    if (confirmReplace) {
-                        // Remove existing episode
-                        anime.episodes = anime.episodes.filter(ep => ep.episode != episodeNumber);
-                    } else {
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = originalBtnText;
-                        feather.replace();
-                        return;
-                    }
-                }
-                
-                // Add the new episode
-                const newEpisode = {
-                    episode: parseInt(episodeNumber),
-                    title: episodeTitle,
-                    videoUrl: videoUrl,
-                    dateAdded: new Date().toISOString()
+            }
+            
+            // Check if this is an embed code
+            const embedInfo = detectEmbedCode(videoUrl);
+            let videoData = null;
+            
+            if (embedInfo) {
+                videoData = {
+                    type: 'embed',
+                    provider: embedInfo.type,
+                    dataId: embedInfo.dataId,
+                    displayType: embedInfo.displayType,
+                    embedCode: embedInfo.embedCode
                 };
                 
-                // Add file info if provided
-                if (fileInfo) {
-                    newEpisode.fileInfo = fileInfo;
+                // For embed codes, we store the embed information
+                videoUrl = JSON.stringify(videoData);
+            } else if (videoUrl === "FILE_UPLOAD_REFERENCE" && window.uploadedVideoFile) {
+                // For uploaded files, handle as before
+                const fileSizeMB = (window.uploadedVideoFile.size / (1024 * 1024)).toFixed(2);
+                
+                // Store a reference with file info
+                const fileInfo = {
+                    name: window.uploadedVideoFile.name,
+                    size: window.uploadedVideoFile.size,
+                    type: window.uploadedVideoFile.type,
+                    lastModified: window.uploadedVideoFile.lastModified
+                };
+                
+                videoData = {
+                    type: 'file',
+                    fileInfo: fileInfo
+                };
+                
+                // For local file reference
+                videoUrl = JSON.stringify(videoData);
+            }
+            
+            // Add the new episode
+            anime.episodes.push({
+                episode: parseInt(episodeNumber),
+                title: episodeTitle,
+                videoUrl: videoUrl,
+                dateAdded: new Date().toISOString()
+            });
+            
+            // Update episode count information
+            const epNumbers = anime.episodes.map(ep => parseInt(ep.episode));
+            anime.currentEpisode = Math.max(...epNumbers);
+            anime.lastUpdated = new Date().toISOString();
+            
+            try {
+                // Save to localStorage
+                localStorage.setItem('animeData', JSON.stringify(animeData));
+                
+                // Reset form
+                document.getElementById('episodeForm').reset();
+                document.getElementById('episodeVideoPreview').innerHTML = '';
+                
+                // Clear the file reference
+                window.uploadedVideoFile = null;
+                
+                // Show success notification
+                showNotification(`Episode ${episodeNumber} added to "${anime.title}" successfully!`);
+                
+                // Restore button state
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+                feather.replace();
+                
+                // If episode list for this anime is currently visible, update it
+                if (document.getElementById('episodeList').dataset.animeId === animeId) {
+                    showEpisodeList(animeId);
                 }
-                
-                anime.episodes.push(newEpisode);
-                
-                // Update episode count information
-                const epNumbers = anime.episodes.map(ep => parseInt(ep.episode));
-                anime.currentEpisode = Math.max(...epNumbers);
-                anime.lastUpdated = new Date().toISOString();
-                
-                try {
-                    // Save to localStorage
-                    localStorage.setItem('animeData', JSON.stringify(animeData));
-                    
-                    // Reset form
-                    document.getElementById('episodeForm').reset();
-                    document.getElementById('episodeVideoPreview').innerHTML = '';
-                    
-                    // Clear the file reference
-                    window.uploadedVideoFile = null;
-                    window.uploadedVideoBlobUrl = null;
-                    
-                    // Show success notification
-                    showNotification(`Episode ${episodeNumber} added to "${anime.title}" successfully!`);
-                    
-                    // Restore button state
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalBtnText;
-                    feather.replace();
-                    
-                    // If episode list for this anime is currently visible, update it
-                    if (document.getElementById('episodeList').dataset.animeId === animeId) {
-                        showEpisodeList(animeId);
-                    }
-                } catch (error) {
-                    console.error("Error saving data:", error);
-                    showNotification('Error saving episode data: ' + error.message, 'error');
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalBtnText;
-                    feather.replace();
-                }
+            } catch (error) {
+                console.error("Error saving data:", error);
+                showNotification('Error saving episode data. The data might be too large for localStorage.', 'error');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+                feather.replace();
             }
         }
         
@@ -606,72 +497,46 @@
             `;
             
             episodes.forEach(episode => {
-                // Check if this is a blob URL or special reference
-                let isSpecialReference = false;
-                let hasFileInfo = false;
-                let fileInfo = null;
+                let videoPreview = '';
+                let videoType = 'regular';
                 
-                if (episode.fileInfo) {
-                    hasFileInfo = true;
-                    try {
-                        if (typeof episode.fileInfo === 'string') {
-                            fileInfo = JSON.parse(episode.fileInfo);
-                        } else {
-                            fileInfo = episode.fileInfo;
+                try {
+                    // Try to parse the video URL to see if it's structured data
+                    const videoData = JSON.parse(episode.videoUrl);
+                    
+                    if (videoData.type === 'embed') {
+                        // This is an embed
+                        videoType = 'embed';
+                        
+                        if (videoData.provider === 'bigcommand') {
+                            videoPreview = `
+                                <div class="relative aspect-video bg-gray-800 flex items-center justify-center">
+                                    <div class="text-center p-4">
+                                        <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                        <p class="text-gray-400">BigCommand Embed</p>
+                                        <p class="text-sm text-gray-500">ID: ${videoData.dataId}</p>
+                                    </div>
+                                </div>
+                            `;
                         }
-                    } catch (e) {
-                        console.error("Failed to parse file info:", e);
+                    } else if (videoData.type === 'file') {
+                        // This is a file reference
+                        videoType = 'file';
+                        const fileInfo = videoData.fileInfo;
+                        
+                        videoPreview = `
+                            <div class="relative aspect-video bg-gray-800 flex items-center justify-center">
+                                <div class="text-center p-4">
+                                    <i data-feather="film" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                    <p class="text-gray-400">Local video file: ${fileInfo.name}</p>
+                                    <p class="text-sm text-gray-500">${(fileInfo.size / (1024 * 1024)).toFixed(2)}MB</p>
+                                </div>
+                            </div>
+                        `;
                     }
-                }
-                
-                // Video source HTML
-                let videoSource = '';
-                
-                // Handle video source based on file info
-                if (hasFileInfo && fileInfo) {
-                    isSpecialReference = true;
-                    videoSource = `
-                        <div class="relative aspect-video bg-black">
-                            <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
-                                <source src="${episode.videoUrl}" type="${fileInfo.type || 'video/mp4'}">
-                                Your browser does not support the video tag.
-                            </video>
-                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                                ${fileInfo.name || 'Video'} (${(fileInfo.size / (1024 * 1024)).toFixed(2)}MB)
-                            </div>
-                        </div>
-                    `;
-                }
-                else if (episode.videoUrl && episode.videoUrl.startsWith('blob:')) {
-                    isSpecialReference = true;
-                    videoSource = `
-                        <div class="relative aspect-video bg-black">
-                            <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
-                                <source src="${episode.videoUrl}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video>
-                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                                Blob URL (Session Only)
-                            </div>
-                        </div>
-                    `;
-                }
-                else if (episode.videoUrl && episode.videoUrl.startsWith('data:')) {
-                    isSpecialReference = true;
-                    videoSource = `
-                        <div class="relative aspect-video bg-black">
-                            <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
-                                <source src="${episode.videoUrl}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video>
-                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                                Data URL Video
-                            </div>
-                        </div>
-                    `;
-                }
-                else {
-                    videoSource = `
+                } catch (e) {
+                    // Not JSON, treat as regular URL
+                    videoPreview = `
                         <div class="relative aspect-video bg-black">
                             <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls>
                                 <source src="${episode.videoUrl}" type="video/mp4">
@@ -712,7 +577,7 @@
                             </div>
                         </div>
                         
-                        ${videoSource}
+                        ${videoPreview}
                     </div>
                 `;
             });
@@ -740,55 +605,72 @@
             document.getElementById('animeSelect').value = animeId;
             document.getElementById('episodeNumber').value = episode.episode;
             document.getElementById('episodeTitle').value = episode.title || '';
-            document.getElementById('episodeVideoUrl').value = episode.videoUrl || '';
             
-            // Show video preview if exists
-            if (episode.videoUrl) {
-                let videoPreviewHtml = '';
+            let previewContent = '';
+            let videoUrl = episode.videoUrl;
+            
+            // Check if it's an embed or file reference
+            try {
+                const videoData = JSON.parse(episode.videoUrl);
                 
-                if (episode.fileInfo) {
-                    // Try to parse file info
-                    let fileInfo = null;
-                    try {
-                        if (typeof episode.fileInfo === 'string') {
-                            fileInfo = JSON.parse(episode.fileInfo);
-                        } else {
-                            fileInfo = episode.fileInfo;
-                        }
-                        
-                        videoPreviewHtml = `
+                if (videoData.type === 'embed') {
+                    // It's an embed
+                    document.getElementById('episodeVideoUrl').value = videoData.embedCode;
+                    
+                    if (videoData.provider === 'bigcommand') {
+                        previewContent = `
                             <div class="relative rounded-lg overflow-hidden">
-                                <video src="${episode.videoUrl}" class="w-full h-auto" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
-                                    <source src="${episode.videoUrl}" type="${fileInfo.type || 'video/mp4'}">
-                                    Your browser does not support the video tag.
-                                </video>
+                                <div class="aspect-video bg-gray-800 flex items-center justify-center">
+                                    <div class="text-center p-4">
+                                        <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                        <p class="text-gray-400">BigCommand Embed</p>
+                                        <p class="text-sm text-gray-500">ID: ${videoData.dataId}</p>
+                                    </div>
+                                </div>
                                 <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                                    Current video: ${fileInfo.name || 'Unknown'} (${fileInfo.size ? (fileInfo.size / (1024 * 1024)).toFixed(2) : '?'}MB)
+                                    Current embed
                                 </div>
                             </div>
                         `;
-                    } catch (e) {
-                        console.error("Failed to parse file info:", e);
                     }
-                }
-                
-                // If no file info or parsing failed, use simple video preview
-                if (!videoPreviewHtml) {
-                    videoPreviewHtml = `
+                } else if (videoData.type === 'file') {
+                    // It's a file reference
+                    const fileInfo = videoData.fileInfo;
+                    document.getElementById('episodeVideoUrl').value = "FILE_REFERENCE";
+                    
+                    previewContent = `
                         <div class="relative rounded-lg overflow-hidden">
-                            <video src="${episode.videoUrl}" class="w-full h-auto" controls>
-                                <source src="${episode.videoUrl}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video>
+                            <div class="aspect-video bg-gray-800 flex items-center justify-center">
+                                <div class="text-center p-4">
+                                    <i data-feather="film" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                    <p class="text-gray-400">Local video file: ${fileInfo.name}</p>
+                                    <p class="text-sm text-gray-500">${(fileInfo.size / (1024 * 1024)).toFixed(2)}MB</p>
+                                </div>
+                            </div>
                             <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
                                 Current video
                             </div>
                         </div>
                     `;
                 }
+            } catch (e) {
+                // Regular URL
+                document.getElementById('episodeVideoUrl').value = episode.videoUrl;
                 
-                document.getElementById('episodeVideoPreview').innerHTML = videoPreviewHtml;
+                previewContent = `
+                    <div class="relative rounded-lg overflow-hidden">
+                        <video src="${episode.videoUrl}" class="w-full h-auto" controls>
+                            <source src="${episode.videoUrl}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                            Current video
+                        </div>
+                    </div>
+                `;
             }
+            
+            document.getElementById('episodeVideoPreview').innerHTML = previewContent;
             
             // Update button and scroll to form
             document.getElementById('episodeSubmitBtn').innerHTML = '<i data-feather="save" class="w-5 h-5 mr-2"></i> Update Episode';
@@ -847,11 +729,11 @@
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
             notification.className = `fixed top-6 right-6 px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 z-50 ${
-                type === 'success' ? 'bg-green-600 text-white' : type === 'warning' ? 'bg-yellow-600 text-white' : 'bg-red-600 text-white'
+                type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
             }`;
             notification.innerHTML = `
                 <div class="flex items-center gap-3">
-                    <i data-feather="${type === 'success' ? 'check-circle' : type === 'warning' ? 'alert-triangle' : 'alert-circle'}" class="w-5 h-5"></i>
+                    <i data-feather="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-5 h-5"></i>
                     <span>${message}</span>
                 </div>
             `;
@@ -892,6 +774,130 @@
             document.getElementById('imageFileName').textContent = file.name;
         }
         
+        // Function to handle video upload
+        function handleVideoUpload(event) {
+            const file = event.target.files[0];
+            
+            if (!file) return;
+            
+            // Check file type - specifically allow MP4
+            if (!file.type.startsWith('video/') && file.type !== 'video/mp4') {
+                showNotification('Please select a video file (MP4 preferred)', 'error');
+                event.target.value = '';
+                return;
+            }
+            
+            // Check file size (max 200MB)
+            const maxSize = 200 * 1024 * 1024; // 200MB in bytes
+            if (file.size > maxSize) {
+                showNotification('File size exceeds 200MB limit. Please choose a smaller file.', 'error');
+                event.target.value = '';
+                return;
+            }
+            
+            // Show file size info
+            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            showNotification(`Selected video: ${file.name} (${fileSizeMB}MB)`, 'success');
+            
+            // Extract episode number from filename
+            const fileName = file.name;
+            const episodeMatch = fileName.match(/[Ee]pisode\s*(\d+)|[Ee]p\s*(\d+)|[Ee]\s*(\d+)|S\d+E(\d+)/);
+            
+            if (episodeMatch) {
+                // Find the first capture group that's not undefined and is a number
+                const extractedEp = episodeMatch.slice(1).find(match => match && !isNaN(match));
+                if (extractedEp) {
+                    document.getElementById('episodeNumber').value = extractedEp;
+                    showNotification(`Episode ${extractedEp} detected from filename!`);
+                }
+            }
+            
+            // Add loading indicator
+            const previewContainer = 'episodeVideoPreview';
+            document.getElementById(previewContainer).innerHTML = `
+                <div class="flex justify-center items-center p-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+                    <span class="ml-3 text-gray-300">Processing video (${fileSizeMB}MB)...</span>
+                </div>
+            `;
+
+            // Instead of trying to load the entire file into memory at once,
+            // we'll create a URL for the file directly
+            try {
+                const videoUrl = URL.createObjectURL(file);
+                
+                // Display the video preview using the object URL
+                document.getElementById(previewContainer).innerHTML = `
+                    <div class="relative rounded-lg overflow-hidden">
+                        <video src="${videoUrl}" class="w-full h-auto" controls>
+                            <source src="${videoUrl}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                            File: ${file.name} (${fileSizeMB}MB)
+                        </div>
+                    </div>
+                `;
+                
+                // Store the File object reference
+                window.uploadedVideoFile = file;
+                document.getElementById('episodeVideoUrl').value = "FILE_UPLOAD_REFERENCE"; // Special marker
+                
+                // Add a data attribute to track the file
+                document.getElementById('episodeVideoUrl').dataset.fileReference = true;
+                
+            } catch (error) {
+                console.error("Error processing video file:", error);
+                showNotification('Error processing video file. Try a smaller file or different format.', 'error');
+                document.getElementById(previewContainer).innerHTML = '';
+                event.target.value = '';
+            }
+        }
+        
+        // Detect embed code when pasted into the video URL field
+        function handleEmbedCodePaste() {
+            // Get the input field
+            const videoUrlField = document.getElementById('episodeVideoUrl');
+            
+            // Wait a moment for the paste to complete
+            setTimeout(() => {
+                const content = videoUrlField.value;
+                
+                // Check if it looks like an embed code
+                if (content.includes('<script') || content.includes('<div') || content.includes('iframe')) {
+                    // Try to detect embed type
+                    const embedInfo = detectEmbedCode(content);
+                    
+                    if (embedInfo) {
+                        // Show a preview of the embed
+                        let previewHtml = '';
+                        
+                        if (embedInfo.type === 'bigcommand') {
+                            previewHtml = `
+                                <div class="relative rounded-lg overflow-hidden">
+                                    <div class="aspect-video bg-gray-800 flex items-center justify-center">
+                                        <div class="text-center p-4">
+                                            <i data-feather="video" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
+                                            <p class="text-gray-300">BigCommand Embed Detected</p>
+                                            <p class="text-gray-400 mt-2">ID: ${embedInfo.dataId}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
+                        if (previewHtml) {
+                            document.getElementById('episodeVideoPreview').innerHTML = previewHtml;
+                            feather.replace();
+                            
+                            // Show success message
+                            showNotification('Embed code detected and ready to use!', 'success');
+                        }
+                    }
+                }
+            }, 100);
+        }
+        
         // Function to switch tabs
         function switchTab(tabId) {
             // Hide all tabs
@@ -929,6 +935,10 @@
             document.getElementById('thumbnailFile').addEventListener('change', handleThumbnailUpload);
             document.getElementById('episodeVideoFile').addEventListener('change', handleVideoUpload);
             
+            // Set up embed code paste detection
+            document.getElementById('episodeVideoUrl').addEventListener('paste', handleEmbedCodePaste);
+            document.getElementById('episodeVideoUrl').addEventListener('input', handleEmbedCodePaste);
+            
             // Set up anime select change handler
             document.getElementById('animeSelect').addEventListener('change', function() {
                 const animeId = this.value;
@@ -940,7 +950,6 @@
 
             // Initialize file upload reference storage
             window.uploadedVideoFile = null;
-            window.uploadedVideoBlobUrl = null;
         });
     </script>
     <style>
@@ -1093,7 +1102,7 @@
                             </div>
                             <div id="thumbnailPreview" class="mt-3 h-40 w-28 bg-cover bg-center rounded-lg hidden"></div>
                         </div>
-
+                        
                         <div>
                             <label class="block text-sm font-medium mb-2">Upload Thumbnail</label>
                             <label class="flex items-center px-4 py-2 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition duration-300">
@@ -1151,14 +1160,15 @@
                         </div>
                         
                         <div class="md:col-span-2">
-                            <label for="episodeVideoUrl" class="block text-sm font-medium mb-2">Video URL</label>
+                            <label for="episodeVideoUrl" class="block text-sm font-medium mb-2">Video URL or Embed Code</label>
                             <div class="relative">
-                                <input type="text" id="episodeVideoUrl" placeholder="https://example.com/video.mp4" required
-                                      class="w-full px-4 py-2 pl-10 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600">
-                                <i data-feather="link" class="absolute left-3 top-3 text-gray-400 w-4 h-4"></i>
+                                <textarea id="episodeVideoUrl" rows="3" required
+                                      class="w-full px-4 py-2 pl-10 bg-gray-700/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-gray-600"
+                                      placeholder="Enter URL, paste embed code (BigCommand), or upload a video file"></textarea>
+                                <i data-feather="code" class="absolute left-3 top-3 text-gray-400 w-4 h-4"></i>
                             </div>
                             <p class="mt-2 text-xs text-gray-500">
-                                Enter a URL or upload a video file below
+                                Paste a BigCommand embed code, enter a direct video URL, or upload a video file below
                             </p>
                         </div>
                         
@@ -1218,7 +1228,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Description</th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Views</th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Date Added</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Video</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
