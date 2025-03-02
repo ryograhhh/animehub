@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -21,7 +22,7 @@ const storage = multer.diskStorage({
     let specificDir;
     if (file.mimetype.startsWith('image/')) {
       specificDir = path.join(uploadDir, 'images');
-    } else if (file.mimetype.startsWith('video/') || file.mimetype === 'video/mp4') {
+    } else if (file.mimetype.startsWith('video/')) {
       specificDir = path.join(uploadDir, 'videos');
     } else {
       specificDir = path.join(uploadDir, 'others');
@@ -42,7 +43,7 @@ const storage = multer.diskStorage({
   }
 });
 
-// Configure multer for file size limits - 200MB for video files
+// Configure multer for file size limits - increased to 200MB
 const upload = multer({
   storage: storage,
   limits: {
@@ -103,7 +104,7 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
   }
 });
 
-// Endpoint to handle video uploads with 200MB support
+// Endpoint to handle video uploads with chunked upload support
 app.post('/api/upload/video', upload.single('video'), (req, res) => {
   try {
     if (!req.file) {
@@ -177,6 +178,23 @@ app.get('/api/files', (req, res) => {
     console.error('Error getting files:', error);
     res.status(500).json({ success: false, message: error.message });
   }
+});
+
+// Handle BigCommand embedded videos
+app.get('/api/embed/info', (req, res) => {
+  const { embedId } = req.query;
+  
+  if (!embedId) {
+    return res.status(400).json({ success: false, message: 'No embed ID provided' });
+  }
+  
+  // Since we can't actually fetch info from BigCommand's API,
+  // we just return a basic response to confirm we received the request
+  res.json({
+    success: true,
+    embedId: embedId,
+    status: 'available'
+  });
 });
 
 // Error handling middleware
