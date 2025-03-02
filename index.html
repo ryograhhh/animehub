@@ -8,8 +8,51 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script>
+        // Initialize IndexedDB
+        let db;
+        const dbName = "senpaiAnimeDB";
+        const dbVersion = 1;
+
+        // Initialize IndexedDB when the page loads
+        function initializeDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(dbName, dbVersion);
+                
+                request.onerror = function(event) {
+                    console.error("IndexedDB error:", event.target.error);
+                    reject(event.target.error);
+                };
+                
+                request.onsuccess = function(event) {
+                    db = event.target.result;
+                    console.log("Database opened successfully");
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = function(event) {
+                    const db = event.target.result;
+                    
+                    // Create a store for video files
+                    if (!db.objectStoreNames.contains('videos')) {
+                        const videoStore = db.createObjectStore('videos', { keyPath: 'id' });
+                        videoStore.createIndex('animeId', 'animeId', { unique: false });
+                        videoStore.createIndex('episode', 'episode', { unique: false });
+                    }
+                };
+            });
+        }
+
         // Function to load anime data from localStorage
-        function loadAnimeData() {
+        async function loadAnimeData() {
+            // Initialize DB
+            try {
+                if (!db) {
+                    await initializeDB();
+                }
+            } catch (error) {
+                console.error("Failed to initialize database:", error);
+            }
+            
             const animeContainer = document.getElementById('animeContainer');
             const trendingContainer = document.getElementById('trendingContainer');
             const continueWatchingContainer = document.getElementById('continueWatchingContainer');
@@ -242,7 +285,14 @@
         });
         
         // Initialize on page load
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
+            // Initialize IndexedDB
+            try {
+                await initializeDB();
+            } catch (error) {
+                console.error("Failed to initialize database:", error);
+            }
+            
             // Replace all feather icons
             feather.replace();
             
@@ -383,8 +433,7 @@
             </div>
         </div>
     </header>
-
-    <!-- Hero Section -->
+     <!-- Hero Section -->
     <section class="relative py-24 overflow-hidden">
         <div class="absolute inset-0 bg-gradient-to-br from-red-900/40 to-gray-900/80"></div>
         <div class="absolute inset-0 overflow-hidden opacity-20">
@@ -393,7 +442,7 @@
         <div class="container mx-auto px-4 relative">
             <div class="max-w-3xl mx-auto text-center">
                 <h2 class="text-4xl md:text-5xl font-bold mb-4 red-gradient">Your Ultimate Anime Collection</h2>
-                <p class="text-lg md:text-xl text-gray-300 mb-8">Build and manage your own personal anime library with MP4 support for all your files.</p>
+                <p class="text-lg md:text-xl text-gray-300 mb-8">Build and manage your own personal anime library with MP4 support up to 200MB per file.</p>
                 <div class="flex flex-wrap justify-center gap-4">
                     <a href="admin.html" class="inline-flex items-center gap-2 px-8 py-3 bg-red-600 hover:bg-red-700 rounded-full text-white font-medium transition duration-300 transform hover:scale-105 shadow-lg shadow-red-600/30">
                         <i data-feather="plus-circle" class="w-5 h-5"></i>
