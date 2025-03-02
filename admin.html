@@ -8,41 +8,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script>
-        // Initialize IndexedDB
-        let db;
-        const dbName = "senpaiAnimeDB";
-        const dbVersion = 1;
-
-        // Initialize IndexedDB when the page loads
-        function initializeDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(dbName, dbVersion);
-                
-                request.onerror = function(event) {
-                    console.error("IndexedDB error:", event.target.error);
-                    showNotification("Error opening database. Large file support may be limited.", "error");
-                    reject(event.target.error);
-                };
-                
-                request.onsuccess = function(event) {
-                    db = event.target.result;
-                    console.log("Database opened successfully");
-                    resolve(db);
-                };
-                
-                request.onupgradeneeded = function(event) {
-                    const db = event.target.result;
-                    
-                    // Create a store for video files
-                    if (!db.objectStoreNames.contains('videos')) {
-                        const videoStore = db.createObjectStore('videos', { keyPath: 'id' });
-                        videoStore.createIndex('animeId', 'animeId', { unique: false });
-                        videoStore.createIndex('episode', 'episode', { unique: false });
-                    }
-                };
-            });
-        }
-
         // Function to generate a unique ID
         function generateId() {
             return 'anime_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -260,7 +225,7 @@
             }
         }
         
-        // Enhanced handleVideoUpload function with IndexedDB support
+        // ======== FIXED VIDEO UPLOAD FUNCTION ========
         function handleVideoUpload(event) {
             const file = event.target.files[0];
             const isEpisodeForm = event.target.id === 'episodeVideoFile';
@@ -308,33 +273,44 @@
                 </div>
             `;
 
-            // Create URL for preview
-            const videoUrl = URL.createObjectURL(file);
-            
-            // Display the video preview using the object URL
-            document.getElementById(previewContainer).innerHTML = `
-                <div class="relative rounded-lg overflow-hidden">
-                    <video src="${videoUrl}" class="w-full h-auto" controls>
-                        <source src="${videoUrl}" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                    <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                        File: ${file.name} (${fileSizeMB}MB)
+            try {
+                // Create URL for preview
+                const videoUrl = URL.createObjectURL(file);
+                
+                // Display the video preview using the object URL
+                document.getElementById(previewContainer).innerHTML = `
+                    <div class="relative rounded-lg overflow-hidden">
+                        <video src="${videoUrl}" class="w-full h-auto" controls>
+                            <source src="${videoUrl}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                            File: ${file.name} (${fileSizeMB}MB)
+                        </div>
                     </div>
-                </div>
-            `;
-            
-            // For the form submission, store a reference to the file
-            const urlField = isEpisodeForm ? 'episodeVideoUrl' : 'videoUrl';
-            
-            // Store the File object reference
-            window.uploadedVideoFile = file;
-            document.getElementById(urlField).value = "FILE_UPLOAD_REFERENCE"; // Special marker
-            document.getElementById(urlField).dataset.fileReference = true;
+                `;
+                
+                // For the form submission
+                const urlField = isEpisodeForm ? 'episodeVideoUrl' : 'videoUrl';
+                
+                // Store the File object reference
+                window.uploadedVideoFile = file;
+                // Also store the blob URL for direct access
+                window.uploadedVideoBlobUrl = videoUrl;
+                
+                document.getElementById(urlField).value = "FILE_UPLOAD_REFERENCE"; // Special marker
+                document.getElementById(urlField).dataset.fileReference = true;
+                
+            } catch (error) {
+                console.error("Error processing video file:", error);
+                showNotification('Error processing video file. Try a smaller file or different format.', 'error');
+                document.getElementById(previewContainer).innerHTML = '';
+                event.target.value = '';
+            }
         }
 
-        // Modified form submission handler with IndexedDB storage
-        async function handleEpisodeFormSubmit(event) {
+        // ======== FIXED EPISODE FORM SUBMISSION ========
+        function handleEpisodeFormSubmit(event) {
             event.preventDefault();
             
             // Show loading state
@@ -375,85 +351,69 @@
             }
             
             try {
-                // Ensure DB is initialized
-                if (!db) {
-                    await initializeDB();
-                }
-                
                 // Handle file upload case
                 if (videoUrl === "FILE_UPLOAD_REFERENCE" && window.uploadedVideoFile) {
                     const file = window.uploadedVideoFile;
-                    const videoId = `anime_${animeId}_ep_${episodeNumber}_${Date.now()}`;
                     
-                    // Store the file info for localStorage reference
-                    const fileInfo = {
-                        id: videoId,
-                        name: file.name,
-                        size: file.size,
-                        type: file.type,
-                        animeId: animeId,
-                        episode: parseInt(episodeNumber)
-                    };
-                    
-                    // For smaller files, use data URL
-                    if (file.size < 5 * 1024 * 1024) { // Less than 5MB
+                    // Use the blob URL directly - simplest approach
+                    // NOTE: This will work in the current browser session
+                    if (window.uploadedVideoBlobUrl) {
+                        const blobUrl = window.uploadedVideoBlobUrl;
+                        
+                        // Store file info for reference
+                        const fileInfo = {
+                            name: file.name,
+                            size: file.size,
+                            type: file.type || 'video/mp4',
+                            blobUrl: true,
+                            uploadTime: new Date().toISOString()
+                        };
+                        
+                        finishSubmission(animeId, episodeNumber, episodeTitle, blobUrl, fileInfo);
+                        return;
+                    }
+                    // Fallback to direct data URL for small files
+                    else if (file.size < 30 * 1024 * 1024) { // Less than 30MB
+                        submitBtn.innerHTML = `<i data-feather="loader" class="w-5 h-5 animate-spin mr-2"></i> Converting video...`;
+                        feather.replace();
+                        
+                        // Create data URL
                         const reader = new FileReader();
                         reader.onload = function(e) {
-                            // Store small file directly in localStorage
+                            // Success! Use the data URL directly
                             finishSubmission(animeId, episodeNumber, episodeTitle, e.target.result);
                         };
-                        reader.onerror = function() {
-                            showNotification('Error reading video file', 'error');
+                        reader.onerror = function(error) {
+                            console.error("Error reading file:", error);
+                            showNotification('Error reading video file: ' + error.message, 'error');
                             submitBtn.disabled = false;
                             submitBtn.innerHTML = originalBtnText;
                             feather.replace();
                         };
                         reader.readAsDataURL(file);
-                        return; // Exit early, we'll continue after file is read
-                    } 
+                        return;
+                    }
+                    // Last resort fallback - try to create a blob URL again
                     else {
-                        // For larger files, use IndexedDB
-                        showNotification("Storing large video file in database...", "success");
-                        
-                        // Add loading progress to button
-                        submitBtn.innerHTML = `<i data-feather="loader" class="w-5 h-5 animate-spin mr-2"></i> Storing video...`;
-                        feather.replace();
-                        
-                        // Store the file in IndexedDB
-                        const transaction = db.transaction(['videos'], 'readwrite');
-                        const videoStore = transaction.objectStore('videos');
-                        
-                        // Add file content to fileInfo
-                        fileInfo.data = await file.arrayBuffer();
-                        
-                        // Store in IndexedDB
-                        const request = videoStore.add(fileInfo);
-                        
-                        request.onsuccess = function() {
-                            showNotification("Video stored successfully!", "success");
-                            
-                            // Create a permanent reference for localStorage
-                            const storageRef = {
-                                type: "indexedDB",
-                                videoId: videoId,
-                                fileName: file.name,
-                                fileSize: file.size,
-                                mimeType: file.type
+                        try {
+                            const blobUrl = URL.createObjectURL(file);
+                            const fileInfo = {
+                                name: file.name,
+                                size: file.size,
+                                type: file.type || 'video/mp4',
+                                blobUrl: true,
+                                fallback: true,
+                                uploadTime: new Date().toISOString()
                             };
-                            
-                            // Save reference to localStorage
-                            finishSubmission(animeId, episodeNumber, episodeTitle, JSON.stringify(storageRef));
-                        };
-                        
-                        request.onerror = function(event) {
-                            console.error("IndexedDB error:", event.target.error);
-                            showNotification("Error storing video. Try a smaller file or different format.", "error");
+                            finishSubmission(animeId, episodeNumber, episodeTitle, blobUrl, fileInfo);
+                            return;
+                        } catch (error) {
+                            showNotification('Error creating video URL: ' + error.message, 'error');
                             submitBtn.disabled = false;
                             submitBtn.innerHTML = originalBtnText;
                             feather.replace();
-                        };
-                        
-                        return;
+                            return;
+                        }
                     }
                 } else {
                     // Regular URL was provided
@@ -461,13 +421,13 @@
                 }
             } catch (error) {
                 console.error("Error in episode submission:", error);
-                showNotification("An error occurred while processing your video", "error");
+                showNotification("An error occurred while processing your video: " + error.message, "error");
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalBtnText;
                 feather.replace();
             }
             
-            function finishSubmission(animeId, episodeNumber, episodeTitle, videoUrl) {
+            function finishSubmission(animeId, episodeNumber, episodeTitle, videoUrl, fileInfo = null) {
                 // Get existing data
                 let animeData = JSON.parse(localStorage.getItem('animeData')) || [];
                 const anime = animeData.find(a => a.id === animeId);
@@ -490,24 +450,6 @@
                 if (episodeExists) {
                     const confirmReplace = confirm(`Episode ${episodeNumber} already exists. Do you want to replace it?`);
                     if (confirmReplace) {
-                        // If we're replacing an episode with IndexedDB reference, clean up old reference
-                        const existingEp = anime.episodes.find(ep => ep.episode == episodeNumber);
-                        if (existingEp && existingEp.videoUrl) {
-                            try {
-                                const existingRef = JSON.parse(existingEp.videoUrl);
-                                if (existingRef && existingRef.type === "indexedDB" && existingRef.videoId) {
-                                    // Delete from IndexedDB if possible
-                                    if (db) {
-                                        const transaction = db.transaction(['videos'], 'readwrite');
-                                        const videoStore = transaction.objectStore('videos');
-                                        videoStore.delete(existingRef.videoId);
-                                    }
-                                }
-                            } catch (e) {
-                                // Not a JSON reference, no cleanup needed
-                            }
-                        }
-                        
                         // Remove existing episode
                         anime.episodes = anime.episodes.filter(ep => ep.episode != episodeNumber);
                     } else {
@@ -519,12 +461,19 @@
                 }
                 
                 // Add the new episode
-                anime.episodes.push({
+                const newEpisode = {
                     episode: parseInt(episodeNumber),
                     title: episodeTitle,
                     videoUrl: videoUrl,
                     dateAdded: new Date().toISOString()
-                });
+                };
+                
+                // Add file info if provided
+                if (fileInfo) {
+                    newEpisode.fileInfo = fileInfo;
+                }
+                
+                anime.episodes.push(newEpisode);
                 
                 // Update episode count information
                 const epNumbers = anime.episodes.map(ep => parseInt(ep.episode));
@@ -541,6 +490,7 @@
                     
                     // Clear the file reference
                     window.uploadedVideoFile = null;
+                    window.uploadedVideoBlobUrl = null;
                     
                     // Show success notification
                     showNotification(`Episode ${episodeNumber} added to "${anime.title}" successfully!`);
@@ -556,7 +506,7 @@
                     }
                 } catch (error) {
                     console.error("Error saving data:", error);
-                    showNotification('Error saving episode data. The file might be too large for localStorage.', 'error');
+                    showNotification('Error saving episode data: ' + error.message, 'error');
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = originalBtnText;
                     feather.replace();
@@ -615,8 +565,8 @@
             document.getElementById('episodeListSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         
-        // Modified showEpisodeList function to handle IndexedDB references
-        async function showEpisodeList(animeId) {
+        // Function to show episode list
+        function showEpisodeList(animeId) {
             const episodeList = document.getElementById('episodeList');
             const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
             const anime = animeData.find(a => a.id === animeId);
@@ -650,68 +600,77 @@
             // Sort episodes by number
             const episodes = [...anime.episodes].sort((a, b) => parseInt(a.episode) - parseInt(b.episode));
             
-            // Initialize DB if not already initialized
-            if (!db) {
-                try {
-                    await initializeDB();
-                } catch (error) {
-                    console.error("Failed to initialize database:", error);
-                }
-            }
-            
             // Create episode list HTML
             let episodeHTML = `
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             `;
             
-            for (const episode of episodes) {
-                // Handle videoUrl that might be different types of references
-                let videoSource = '';
+            episodes.forEach(episode => {
+                // Check if this is a blob URL or special reference
                 let isSpecialReference = false;
+                let hasFileInfo = false;
+                let fileInfo = null;
                 
-                try {
-                    // Check if it's a JSON string
-                    if (episode.videoUrl.startsWith('{') && episode.videoUrl.includes('type')) {
-                        const refData = JSON.parse(episode.videoUrl);
-                        
-                        // Handle different reference types
-                        if (refData.type === "indexedDB" && refData.videoId) {
-                            isSpecialReference = true;
-                            
-                            // Create a preview for IndexedDB reference
-                            videoSource = `
-                                <div class="relative aspect-video bg-gray-800 flex items-center justify-center">
-                                    <div class="text-center p-4">
-                                        <i data-feather="database" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
-                                        <p class="text-gray-400">${refData.fileName || 'Video file'}</p>
-                                        <p class="text-sm text-gray-500">${(refData.fileSize / (1024 * 1024)).toFixed(2)}MB</p>
-                                        <p class="text-xs text-gray-500 mt-2">Stored in browser database</p>
-                                    </div>
-                                </div>
-                            `;
+                if (episode.fileInfo) {
+                    hasFileInfo = true;
+                    try {
+                        if (typeof episode.fileInfo === 'string') {
+                            fileInfo = JSON.parse(episode.fileInfo);
+                        } else {
+                            fileInfo = episode.fileInfo;
                         }
-                        // Legacy object URL reference (won't work across sessions)
-                        else if (refData.objectUrl) {
-                            isSpecialReference = true;
-                            videoSource = `
-                                <div class="relative aspect-video bg-gray-800 flex items-center justify-center">
-                                    <div class="text-center p-4">
-                                        <i data-feather="film" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
-                                        <p class="text-gray-400">Large video file: ${refData.name || 'Unknown'}</p>
-                                        <p class="text-sm text-gray-500">${(refData.size / (1024 * 1024)).toFixed(2)}MB</p>
-                                        <p class="text-gray-500 mt-2 text-xs">This file may only be available in the browser session it was uploaded in.</p>
-                                    </div>
-                                </div>
-                            `;
-                        }
+                    } catch (e) {
+                        console.error("Failed to parse file info:", e);
                     }
-                } catch (e) {
-                    // Not a JSON string, treat as regular URL
-                    console.error("Error parsing video reference:", e);
                 }
                 
-                // If not a special reference, use regular video tag
-                if (!isSpecialReference) {
+                // Video source HTML
+                let videoSource = '';
+                
+                // Handle video source based on file info
+                if (hasFileInfo && fileInfo) {
+                    isSpecialReference = true;
+                    videoSource = `
+                        <div class="relative aspect-video bg-black">
+                            <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
+                                <source src="${episode.videoUrl}" type="${fileInfo.type || 'video/mp4'}">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                ${fileInfo.name || 'Video'} (${(fileInfo.size / (1024 * 1024)).toFixed(2)}MB)
+                            </div>
+                        </div>
+                    `;
+                }
+                else if (episode.videoUrl && episode.videoUrl.startsWith('blob:')) {
+                    isSpecialReference = true;
+                    videoSource = `
+                        <div class="relative aspect-video bg-black">
+                            <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
+                                <source src="${episode.videoUrl}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                Blob URL (Session Only)
+                            </div>
+                        </div>
+                    `;
+                }
+                else if (episode.videoUrl && episode.videoUrl.startsWith('data:')) {
+                    isSpecialReference = true;
+                    videoSource = `
+                        <div class="relative aspect-video bg-black">
+                            <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
+                                <source src="${episode.videoUrl}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                Data URL Video
+                            </div>
+                        </div>
+                    `;
+                }
+                else {
                     videoSource = `
                         <div class="relative aspect-video bg-black">
                             <video src="${episode.videoUrl}" class="w-full h-full object-contain" controls>
@@ -756,7 +715,7 @@
                         ${videoSource}
                     </div>
                 `;
-            }
+            });
             
             episodeHTML += `</div>`;
             
@@ -764,8 +723,8 @@
             feather.replace();
         }
         
-        // Modified editEpisode function to handle IndexedDB references
-        async function editEpisode(animeId, episodeNumber) {
+        // Function to edit episode
+        function editEpisode(animeId, episodeNumber) {
             const animeData = JSON.parse(localStorage.getItem('animeData')) || [];
             const anime = animeData.find(a => a.id === animeId);
             
@@ -783,108 +742,39 @@
             document.getElementById('episodeTitle').value = episode.title || '';
             document.getElementById('episodeVideoUrl').value = episode.videoUrl || '';
             
-            // Initialize DB if needed
-            if (!db) {
-                try {
-                    await initializeDB();
-                } catch (error) {
-                    console.error("Failed to initialize database:", error);
-                }
-            }
-            
             // Show video preview if exists
             if (episode.videoUrl) {
-                try {
-                    // Check if it's a JSON string with reference info
-                    if (episode.videoUrl.startsWith('{') && episode.videoUrl.includes('type')) {
-                        const refData = JSON.parse(episode.videoUrl);
-                        
-                        // Handle IndexedDB reference
-                        if (refData.type === "indexedDB" && refData.videoId && db) {
-                            const transaction = db.transaction(['videos'], 'readonly');
-                            const videoStore = transaction.objectStore('videos');
-                            const request = videoStore.get(refData.videoId);
-                            
-                            request.onsuccess = function(event) {
-                                const videoData = event.target.result;
-                                if (videoData && videoData.data) {
-                                    // Create blob from stored data
-                                    const blob = new Blob([videoData.data], { type: videoData.type });
-                                    const url = URL.createObjectURL(blob);
-                                    
-                                    // Show video preview
-                                    document.getElementById('episodeVideoPreview').innerHTML = `
-                                        <div class="relative rounded-lg overflow-hidden">
-                                            <video src="${url}" class="w-full h-auto" controls>
-                                                <source src="${url}" type="video/mp4">
-                                                Your browser does not support the video tag.
-                                            </video>
-                                            <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                                                Current video: ${videoData.name} (${(videoData.size / (1024 * 1024)).toFixed(2)}MB)
-                                            </div>
-                                        </div>
-                                    `;
-                                } else {
-                                    // Video not found in IndexedDB
-                                    document.getElementById('episodeVideoPreview').innerHTML = `
-                                        <div class="relative rounded-lg overflow-hidden">
-                                            <div class="aspect-video bg-gray-800 flex items-center justify-center">
-                                                <div class="text-center p-4">
-                                                    <i data-feather="alert-triangle" class="w-12 h-12 text-yellow-600 mb-2 mx-auto"></i>
-                                                    <p class="text-gray-400">Video file not found in database</p>
-                                                    <p class="text-sm text-gray-500">${refData.fileName || 'Unknown file'}</p>
-                                                    <p class="text-gray-500 mt-4">Please upload the video again</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                    feather.replace();
-                                }
-                            };
-                            
-                            request.onerror = function(event) {
-                                console.error("Error retrieving video from IndexedDB:", event.target.error);
-                                document.getElementById('episodeVideoPreview').innerHTML = `
-                                    <div class="p-4 bg-red-900/30 rounded-lg">
-                                        <p class="text-red-400">Error retrieving video from database</p>
-                                    </div>
-                                `;
-                            };
-                        } 
-                        // Legacy object URL reference (won't work across sessions)
-                        else if (refData.objectUrl) {
-                            document.getElementById('episodeVideoPreview').innerHTML = `
-                                <div class="relative rounded-lg overflow-hidden">
-                                    <div class="aspect-video bg-gray-800 flex items-center justify-center">
-                                        <div class="text-center p-4">
-                                            <i data-feather="film" class="w-12 h-12 text-gray-600 mb-2 mx-auto"></i>
-                                            <p class="text-gray-400">Large video file: ${refData.name || 'Unknown'}</p>
-                                            <p class="text-sm text-gray-500">${(refData.size / (1024 * 1024)).toFixed(2)}MB</p>
-                                            <p class="text-gray-500 mt-2">This file may only be available in the browser session it was uploaded in.</p>
-                                            <p class="text-gray-400 mt-4">Please upload the video again for better persistence</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                            feather.replace();
+                let videoPreviewHtml = '';
+                
+                if (episode.fileInfo) {
+                    // Try to parse file info
+                    let fileInfo = null;
+                    try {
+                        if (typeof episode.fileInfo === 'string') {
+                            fileInfo = JSON.parse(episode.fileInfo);
+                        } else {
+                            fileInfo = episode.fileInfo;
                         }
-                    } else {
-                        // Regular video URL
-                        document.getElementById('episodeVideoPreview').innerHTML = `
+                        
+                        videoPreviewHtml = `
                             <div class="relative rounded-lg overflow-hidden">
-                                <video src="${episode.videoUrl}" class="w-full h-auto" controls>
-                                    <source src="${episode.videoUrl}" type="video/mp4">
+                                <video src="${episode.videoUrl}" class="w-full h-auto" controls poster="https://placehold.co/450x253/1f2937/FFFFFF?text=Video+Preview">
+                                    <source src="${episode.videoUrl}" type="${fileInfo.type || 'video/mp4'}">
                                     Your browser does not support the video tag.
                                 </video>
                                 <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                                    Current video
+                                    Current video: ${fileInfo.name || 'Unknown'} (${fileInfo.size ? (fileInfo.size / (1024 * 1024)).toFixed(2) : '?'}MB)
                                 </div>
                             </div>
                         `;
+                    } catch (e) {
+                        console.error("Failed to parse file info:", e);
                     }
-                } catch (e) {
-                    // Regular video URL
-                    document.getElementById('episodeVideoPreview').innerHTML = `
+                }
+                
+                // If no file info or parsing failed, use simple video preview
+                if (!videoPreviewHtml) {
+                    videoPreviewHtml = `
                         <div class="relative rounded-lg overflow-hidden">
                             <video src="${episode.videoUrl}" class="w-full h-auto" controls>
                                 <source src="${episode.videoUrl}" type="video/mp4">
@@ -896,6 +786,8 @@
                         </div>
                     `;
                 }
+                
+                document.getElementById('episodeVideoPreview').innerHTML = videoPreviewHtml;
             }
             
             // Update button and scroll to form
@@ -904,29 +796,13 @@
             document.getElementById('episodeForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         
-        // Modified deleteEpisode function to clean up IndexedDB references
+        // Function to delete episode
         function deleteEpisode(animeId, episodeNumber) {
             if (confirm(`Are you sure you want to delete Episode ${episodeNumber}? This action cannot be undone.`)) {
                 let animeData = JSON.parse(localStorage.getItem('animeData')) || [];
                 const animeIndex = animeData.findIndex(a => a.id === animeId);
                 
                 if (animeIndex === -1 || !animeData[animeIndex].episodes) return;
-                
-                // Check if episode has IndexedDB reference before removing
-                const episode = animeData[animeIndex].episodes.find(ep => ep.episode == episodeNumber);
-                if (episode && episode.videoUrl) {
-                    try {
-                        const refData = JSON.parse(episode.videoUrl);
-                        if (refData.type === "indexedDB" && refData.videoId && db) {
-                            // Delete video data from IndexedDB
-                            const transaction = db.transaction(['videos'], 'readwrite');
-                            const videoStore = transaction.objectStore('videos');
-                            videoStore.delete(refData.videoId);
-                        }
-                    } catch (e) {
-                        // Not a JSON reference, no cleanup needed
-                    }
-                }
                 
                 // Remove episode
                 animeData[animeIndex].episodes = animeData[animeIndex].episodes.filter(ep => ep.episode != episodeNumber);
@@ -956,30 +832,6 @@
         function deleteAnime(id) {
             if (confirm('Are you sure you want to delete this anime? This action cannot be undone.')) {
                 let animeData = JSON.parse(localStorage.getItem('animeData')) || [];
-                
-                // Get the anime before removing it
-                const anime = animeData.find(a => a.id === id);
-                
-                // Clean up any IndexedDB references in episodes
-                if (anime && anime.episodes && anime.episodes.length > 0 && db) {
-                    for (const episode of anime.episodes) {
-                        if (episode.videoUrl) {
-                            try {
-                                const refData = JSON.parse(episode.videoUrl);
-                                if (refData.type === "indexedDB" && refData.videoId) {
-                                    // Delete from IndexedDB
-                                    const transaction = db.transaction(['videos'], 'readwrite');
-                                    const videoStore = transaction.objectStore('videos');
-                                    videoStore.delete(refData.videoId);
-                                }
-                            } catch (e) {
-                                // Not a JSON reference, no cleanup needed
-                            }
-                        }
-                    }
-                }
-                
-                // Remove the anime from the data
                 animeData = animeData.filter(anime => anime.id !== id);
                 localStorage.setItem('animeData', JSON.stringify(animeData));
                 
@@ -995,11 +847,11 @@
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
             notification.className = `fixed top-6 right-6 px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 z-50 ${
-                type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+                type === 'success' ? 'bg-green-600 text-white' : type === 'warning' ? 'bg-yellow-600 text-white' : 'bg-red-600 text-white'
             }`;
             notification.innerHTML = `
                 <div class="flex items-center gap-3">
-                    <i data-feather="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-5 h-5"></i>
+                    <i data-feather="${type === 'success' ? 'check-circle' : type === 'warning' ? 'alert-triangle' : 'alert-circle'}" class="w-5 h-5"></i>
                     <span>${message}</span>
                 </div>
             `;
@@ -1062,14 +914,7 @@
         }
         
         // Initialize on page load
-        window.addEventListener('DOMContentLoaded', async () => {
-            // Initialize IndexedDB
-            try {
-                await initializeDB();
-            } catch (error) {
-                console.error("Failed to initialize database:", error);
-            }
-            
+        window.addEventListener('DOMContentLoaded', () => {
             // Replace all feather icons
             feather.replace();
             
@@ -1095,6 +940,7 @@
 
             // Initialize file upload reference storage
             window.uploadedVideoFile = null;
+            window.uploadedVideoBlobUrl = null;
         });
     </script>
     <style>
@@ -1247,7 +1093,7 @@
                             </div>
                             <div id="thumbnailPreview" class="mt-3 h-40 w-28 bg-cover bg-center rounded-lg hidden"></div>
                         </div>
-                        
+
                         <div>
                             <label class="block text-sm font-medium mb-2">Upload Thumbnail</label>
                             <label class="flex items-center px-4 py-2 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition duration-300">
