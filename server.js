@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -8,46 +7,54 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Create required directories if they don't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+const imagesDir = path.join(uploadsDir, 'images');
+const videosDir = path.join(uploadsDir, 'videos');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(imagesDir)) {
+  fs.mkdirSync(imagesDir, { recursive: true });
+}
+if (!fs.existsSync(videosDir)) {
+  fs.mkdirSync(videosDir, { recursive: true });
+}
+
 // Configure multer for file storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, 'uploads');
-    
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    
-    // Create specific directories for different file types
+    // Determine which directory to use based on file type
     let specificDir;
     if (file.mimetype.startsWith('image/')) {
-      specificDir = path.join(uploadDir, 'images');
-    } else if (file.mimetype.startsWith('video/')) {
-      specificDir = path.join(uploadDir, 'videos');
+      specificDir = imagesDir;
+    } else if (file.mimetype.startsWith('video/') || file.mimetype === 'video/mp4') {
+      specificDir = videosDir;
     } else {
-      specificDir = path.join(uploadDir, 'others');
-    }
-    
-    // Create the specific directory if it doesn't exist
-    if (!fs.existsSync(specificDir)) {
-      fs.mkdirSync(specificDir, { recursive: true });
+      specificDir = path.join(uploadsDir, 'others');
+      if (!fs.existsSync(specificDir)) {
+        fs.mkdirSync(specificDir, { recursive: true });
+      }
     }
     
     cb(null, specificDir);
   },
   filename: function (req, file, cb) {
-    // Generate unique filename
+    // Generate unique filename while preserving original extension and name
+    const originalName = file.originalname;
+    const nameWithoutExt = path.basename(originalName, path.extname(originalName));
+    const ext = path.extname(originalName);
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const extension = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+    cb(null, nameWithoutExt + '-' + uniqueSuffix + ext);
   }
 });
 
-// Configure multer for file size limits - increased to 200MB
+// Configure multer for file size limits
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 200 * 1024 * 1024, // 200MB limit
+    fileSize: 500 * 1024 * 1024, // Increased to 500MB limit
   },
   fileFilter: function (req, file, cb) {
     // Accept images and videos only, specifically allowing MP4
@@ -65,8 +72,8 @@ const upload = multer({
 app.use(cors());
 app.use(express.static(path.join(__dirname)));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ extended: true, limit: '200mb' }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
 // Routes
 app.get('/', (req, res) => {
@@ -88,7 +95,7 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
     
-    // Return the file URL
+    // Return the file URL (relative to the server root)
     const fileUrl = `/uploads/images/${req.file.filename}`;
     
     res.json({
@@ -104,7 +111,7 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
   }
 });
 
-// Endpoint to handle video uploads, now with increased size limit
+// Endpoint to handle video uploads with improved error handling
 app.post('/api/upload/video', upload.single('video'), (req, res) => {
   try {
     if (!req.file) {
@@ -121,7 +128,7 @@ app.post('/api/upload/video', upload.single('video'), (req, res) => {
       episodeNumber = episodeMatch.slice(1).find(match => match && !isNaN(match));
     }
     
-    // Return the file URL and detected episode number
+    // Return the file URL (relative to the server root)
     const fileUrl = `/uploads/videos/${req.file.filename}`;
     
     res.json({
@@ -141,9 +148,6 @@ app.post('/api/upload/video', upload.single('video'), (req, res) => {
 // API endpoint to get uploaded files list
 app.get('/api/files', (req, res) => {
   try {
-    const imagesDir = path.join(__dirname, 'uploads', 'images');
-    const videosDir = path.join(__dirname, 'uploads', 'videos');
-    
     let images = [];
     let videos = [];
     
@@ -192,6 +196,7 @@ app.use((err, req, res, next) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Uploads directory: ${uploadsDir}`);
 });
 
 // Export for Vercel
