@@ -7,8 +7,7 @@
     <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-    <!-- Add BigCommand script for embed support -->
-    <script type="text/javascript" src="https://cdn.bigcommand.com/dynamic-embed/js/inline.js" async></script>
+    <!-- No need for BigCommand script as we use direct iframe -->
     <script>
         // Get anime ID from URL parameter
         function getAnimeId() {
@@ -82,20 +81,37 @@
                     
                     if (videoData.type === 'embed') {
                         // Handle embed code
-                        if (videoData.provider === 'bigcommand') {
+                        if (videoData.provider === 'iframe') {
+                            // It's an iframe embed
+                            if (videoData.iframeSrc) {
+                                videoPlayer.innerHTML = `
+                                    <div style="width: 100%; height: 100%; position: relative; padding-top: 56.25%">
+                                        <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%" 
+                                            allowtransparency="true" loading="lazy" 
+                                            src="${videoData.iframeSrc}" 
+                                            frameborder="0" allowfullscreen mozallowfullscreen 
+                                            webkitallowfullscreen oallowfullscreen msallowfullscreen 
+                                            scrolling="no">
+                                        </iframe>
+                                    </div>
+                                `;
+                            } else {
+                                // Just use the full embed code
+                                videoPlayer.innerHTML = videoData.embedCode;
+                            }
+                        } else if (videoData.provider === 'bigcommand') {
                             // It's a BigCommand embed
                             videoPlayer.innerHTML = `
-                                <div class="w-full h-full aspect-video">
-                                    <div class="motion_popover" data-id="${videoData.dataId}" data-play-type="" style="width: 100%; height: 100%; position: relative;" data-type="${videoData.displayType || 'thumbnail'}"></div>
+                                <div style="width: 100%; height: 100%; position: relative; padding-top: 56.25%">
+                                    <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%" 
+                                        allowtransparency="true" loading="lazy" 
+                                        src="https://adilo.bigcommand.com/watch/${videoData.dataId}" 
+                                        frameborder="0" allowfullscreen mozallowfullscreen 
+                                        webkitallowfullscreen oallowfullscreen msallowfullscreen 
+                                        scrolling="no">
+                                    </iframe>
                                 </div>
                             `;
-                            
-                            // Reinitialize BigCommand script if needed
-                            if (window.BigCommandReInit) {
-                                setTimeout(() => {
-                                    window.BigCommandReInit();
-                                }, 500);
-                            }
                         } else {
                             // Generic embed code
                             videoPlayer.innerHTML = videoData.embedCode;
@@ -119,23 +135,29 @@
                         `;
                     }
                 } catch (e) {
-                    // Not JSON, treat as regular URL
-                    videoPlayer.innerHTML = `
-                        <video class="w-full h-full" controls autoplay>
-                            <source src="${videoUrl}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                    `;
-                    
-                    // Set up video progress tracking
-                    const videoElement = videoPlayer.querySelector('video');
-                    if (videoElement) {
-                        videoElement.addEventListener('timeupdate', function() {
-                            const progress = (this.currentTime / this.duration) * 100;
-                            if (progress > 0 && this.duration > 0) {
-                                addToWatchHistory(getAnimeId(), getEpisodeNumber(), progress);
-                            }
-                        });
+                    // Check if this is an iframe embed code (contains iframe tag)
+                    if (videoUrl.includes('<iframe') && videoUrl.includes('</iframe>')) {
+                        // It's a direct iframe embed code
+                        videoPlayer.innerHTML = videoUrl;
+                    } else {
+                        // Regular video URL
+                        videoPlayer.innerHTML = `
+                            <video class="w-full h-full" controls autoplay>
+                                <source src="${videoUrl}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                        `;
+                        
+                        // Set up video progress tracking
+                        const videoElement = videoPlayer.querySelector('video');
+                        if (videoElement) {
+                            videoElement.addEventListener('timeupdate', function() {
+                                const progress = (this.currentTime / this.duration) * 100;
+                                if (progress > 0 && this.duration > 0) {
+                                    addToWatchHistory(getAnimeId(), getEpisodeNumber(), progress);
+                                }
+                            });
+                        }
                     }
                 }
             } else {
@@ -289,13 +311,6 @@
             
             localStorage.setItem('watchHistory', JSON.stringify(limitedHistory));
         }
-        
-        // Initialize BigCommand embed if needed
-        window.BigCommandReInit = function() {
-            if (window.BigCommandInit && typeof window.BigCommandInit === 'function') {
-                window.BigCommandInit();
-            }
-        };
         
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
